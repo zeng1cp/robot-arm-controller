@@ -2,6 +2,11 @@ package com.example.robotarmcontroller.ui.robot
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import com.example.robotarmcontroller.protocol.ProtocolCommand
+import com.example.robotarmcontroller.protocol.ProtocolFrame
+import com.example.robotarmcontroller.protocol.ProtocolFrameType
+import com.example.robotarmcontroller.protocol.ServoProtocolCodec
+import com.example.robotarmcontroller.protocol.parseCommandFrame
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val TAG = "RobotViewModel"
+private const val MAX_COMMAND_HISTORY_SIZE = 100
 
 class RobotViewModel : ViewModel() {
 
@@ -79,20 +85,39 @@ class RobotViewModel : ViewModel() {
         return 500f + (angle / 270f) * 2000f
     }
 
+    private fun updateServo(
+        servoId: Int,
+        transform: (ServoState) -> ServoState
+    ) {
+        _uiState.update { currentState ->
+            if (servoId !in currentState.servoList.indices) {
+                Log.w(TAG, "无效舵机ID: $servoId")
+                return@update currentState
+            }
+
+            val newList = currentState.servoList.toMutableList()
+            newList[servoId] = transform(newList[servoId])
+            currentState.copy(servoList = newList)
+        }
+    }
+
+    private fun appendCommandHistory(
+        currentHistory: List<ServoCommand>,
+        command: ServoCommand
+    ): List<ServoCommand> {
+        return (currentHistory + command).takeLast(MAX_COMMAND_HISTORY_SIZE)
+    }
+
     /**
      * 更新PWM值 (同时更新对应的角度值)
      */
     fun updatePwm(servoId: Int, pwm: Float) {
-        _uiState.update { currentState ->
-            val newList = currentState.servoList.toMutableList()
-            val oldServo = newList[servoId]
-            val newAngle = pwmToAngle(pwm)
-            newList[servoId] = oldServo.copy(
+        updateServo(servoId) { oldServo ->
+            oldServo.copy(
                 pwm = pwm,
-                angle = newAngle,
+                angle = pwmToAngle(pwm),
                 isMoving = true
             )
-            currentState.copy(servoList = newList)
         }
     }
 
@@ -100,16 +125,12 @@ class RobotViewModel : ViewModel() {
      * 更新角度值 (同时更新对应的PWM值)
      */
     fun updateAngle(servoId: Int, angle: Float) {
-        _uiState.update { currentState ->
-            val newList = currentState.servoList.toMutableList()
-            val oldServo = newList[servoId]
-            val newPwm = angleToPwm(angle)
-            newList[servoId] = oldServo.copy(
-                pwm = newPwm,
+        updateServo(servoId) { oldServo ->
+            oldServo.copy(
+                pwm = angleToPwm(angle),
                 angle = angle,
                 isMoving = true
             )
-            currentState.copy(servoList = newList)
         }
     }
 
@@ -154,6 +175,50 @@ class RobotViewModel : ViewModel() {
 //        }
 //    }
 
+
+    fun handleIncomingFrame(frame: ProtocolFrame) {
+        when (frame.type) {
+            ProtocolFrameType.SYS -> {
+                val cmdFrame = frame.parseCommandFrame() ?: return
+                when (cmdFrame.cmd) {
+                    ProtocolCommand.Sys.PONG,
+                    ProtocolCommand.Sys.INFO,
+                    ProtocolCommand.Sys.HEARTBEAT -> {
+                        Log.i(TAG, "收到SYS消息: cmd=0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}, len=${cmdFrame.payload.size}")
+                    }
+                    else -> {
+                        Log.d(TAG, "收到未知SYS cmd: 0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}")
+                    }
+                }
+            }
+
+            ProtocolFrameType.STATE -> {
+                val cmdFrame = frame.parseCommandFrame() ?: return
+                when (cmdFrame.cmd) {
+                    ProtocolCommand.State.SERVO -> {
+                        val servoState = ServoProtocolCodec.decodeStatePayload(cmdFrame.payload)
+                        if (servoState != null) {
+                            Log.i(
+                                TAG,
+                                "舵机状态: ID=${servoState.servoId}, PWM=${servoState.currentPwm}, moving=${servoState.moving}, remain=${servoState.remainingMs}"
+                            )
+                            updateServoFromResponse(servoState.servoId, servoState.currentPwm)
+                        } else {
+                            Log.w(TAG, "无效舵机状态帧, payload长度=${cmdFrame.payload.size}")
+                        }
+                    }
+                    else -> {
+                        Log.d(TAG, "收到STATE cmd: 0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}, len=${cmdFrame.payload.size}")
+                    }
+                }
+            }
+
+            else -> {
+                Log.d(TAG, "收到未处理帧类型: 0x${frame.type.toString(16)}")
+            }
+        }
+    }
+
     private fun updateServoFromResponse(servoId: Int, pwmValue: Int) {
         _uiState.update { currentState ->
             val newList = currentState.servoList.toMutableList()
@@ -178,9 +243,13 @@ class RobotViewModel : ViewModel() {
     }
 
     fun onPwmChangeFinished(servoId: Int) {
+        if (servoId !in _uiState.value.servoList.indices) {
+            Log.w(TAG, "无效舵机ID: $servoId")
+            return
+        }
+
         val servo = _uiState.value.servoList[servoId]
-        var pwm = servo.pwm
-        pwm = pwm.coerceIn(500f, 2500f)
+        val pwm = servo.pwm.coerceIn(500f, 2500f)
 
         _uiState.update { currentState ->
             val newList = currentState.servoList.toMutableList()
@@ -190,7 +259,7 @@ class RobotViewModel : ViewModel() {
             currentState.copy(
                 servoList = newList,
                 lastCommandSent = command,
-                commandHistory = currentState.commandHistory + command
+                commandHistory = appendCommandHistory(currentState.commandHistory, command)
             )
         }
 
@@ -202,13 +271,16 @@ class RobotViewModel : ViewModel() {
     }
 
     fun onAngleChangeFinished(servoId: Int) {
+        if (servoId !in _uiState.value.servoList.indices) {
+            Log.w(TAG, "无效舵机ID: $servoId")
+            return
+        }
+
         val servo = _uiState.value.servoList[servoId]
-        var angle = servo.angle
-        angle = angle.coerceIn(0f, 270f)
-        var newPwm = 0f
+        val angle = servo.angle.coerceIn(0f, 270f)
+        val newPwm = angleToPwm(angle)
         _uiState.update { currentState ->
             val newList = currentState.servoList.toMutableList()
-            newPwm = angleToPwm(angle)
             newList[servoId] = servo.copy(
                 pwm = newPwm,
                 angle = angle,
@@ -219,7 +291,7 @@ class RobotViewModel : ViewModel() {
             currentState.copy(
                 servoList = newList,
                 lastCommandSent = command,
-                commandHistory = currentState.commandHistory + command
+                commandHistory = appendCommandHistory(currentState.commandHistory, command)
             )
         }
 

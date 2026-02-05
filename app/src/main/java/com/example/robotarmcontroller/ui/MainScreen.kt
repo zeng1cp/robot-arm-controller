@@ -7,6 +7,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.robotarmcontroller.ui.ble.*
+import com.example.robotarmcontroller.protocol.ProtocolFrameType
+import com.example.robotarmcontroller.protocol.ServoProtocolCodec
+import com.example.robotarmcontroller.protocol.ServoSetPwmPayload
+import com.example.robotarmcontroller.protocol.SysProtocolCodec
 import com.example.robotarmcontroller.ui.robot.*
 import kotlinx.coroutines.launch
 
@@ -33,15 +37,17 @@ fun MainScreen(
                 // 创建 BLE 服务并传递给机械臂 ViewModel
                 val bleService = object : BleService {
                     override suspend fun sendServoCommand(servoId: Int, pwmValue: Int): Boolean {
-                        val data = ByteArray(3)
-                        data[0] = servoId.toByte()
-                        data[1] = ((pwmValue shr 8) and 0xFF).toByte()
-                        data[2] = (pwmValue and 0xFF).toByte()
-                        return bleViewModel.sendFrame(0x23u, data)
+                        val data = ServoProtocolCodec.encodeSetPwm(
+                            ServoSetPwmPayload(servoId = servoId, pwmValue = pwmValue)
+                        )
+                        return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
                     }
 
                     override suspend fun sendTestMessage(message: String): Boolean {
-                        return bleViewModel.sendFrame(0x22u, message.toByteArray())
+                        return bleViewModel.sendFrame(
+                            ProtocolFrameType.SYS,
+                            SysProtocolCodec.encodePing(message)
+                        )
                     }
 
                     override suspend fun sendFrame(frameType: UInt, data: ByteArray): Boolean {
@@ -81,8 +87,8 @@ fun MainScreen(
 
     // 监听接收到的帧数据，并传递给 RobotViewModel
     LaunchedEffect(Unit) {
-        bleViewModel.frameData.collect { frameData ->
-//            robotViewModel.handleFrame(frameData)
+        bleViewModel.incomingFrames.collect { frame ->
+            robotViewModel.handleIncomingFrame(frame)
         }
     }
 

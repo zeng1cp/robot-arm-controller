@@ -6,9 +6,10 @@ import androidx.bluetooth.BluetoothDevice
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.robotarmcontroller.BleManager
-import com.example.robotarmcontroller.tinyframe.BleFrameCallback
 import com.example.robotarmcontroller.tinyframe.BleTinyFramePort
 import kotlinx.coroutines.Job
+import com.example.robotarmcontroller.protocol.ProtocolFrame
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -30,9 +31,13 @@ class BleViewModel(
     private var connectJob: Job? = null
     private var dataReceiveJob: Job? = null  // 新增：数据接收任务
 
-    // 帧接收共享流（用于向其他ViewModel发送数据）
-    private val _frameData = MutableSharedFlow<ByteArray>()
-    val frameData: SharedFlow<ByteArray> = _frameData.asSharedFlow()
+    // TinyFrame 解析后的帧共享流（用于向其他ViewModel发送数据）
+    private val _incomingFrames = MutableSharedFlow<ProtocolFrame>(
+        replay = 0,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val incomingFrames: SharedFlow<ProtocolFrame> = _incomingFrames.asSharedFlow()
 
     init {
         // 监听连接状态
@@ -215,7 +220,12 @@ class BleViewModel(
                             // TinyFrame解析后的帧数据回调
                             viewModelScope.launch {
                                 Log.d(TAG, "TinyFrame解析到帧: type=0x${frameType.toString(16)}, len=$len")
-                                // 这里可以进一步处理解析后的帧
+                                _incomingFrames.emit(
+                                    ProtocolFrame(
+                                        type = frameType,
+                                        payload = data.copyOf(len.coerceAtMost(data.size))
+                                    )
+                                )
                             }
                         }
 
