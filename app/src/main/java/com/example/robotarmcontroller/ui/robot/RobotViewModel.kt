@@ -2,6 +2,11 @@ package com.example.robotarmcontroller.ui.robot
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import com.example.robotarmcontroller.protocol.ProtocolCommand
+import com.example.robotarmcontroller.protocol.ProtocolFrame
+import com.example.robotarmcontroller.protocol.ProtocolFrameType
+import com.example.robotarmcontroller.protocol.ServoProtocolCodec
+import com.example.robotarmcontroller.protocol.parseCommandFrame
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -169,6 +174,50 @@ class RobotViewModel : ViewModel() {
 //            }
 //        }
 //    }
+
+
+    fun handleIncomingFrame(frame: ProtocolFrame) {
+        when (frame.type) {
+            ProtocolFrameType.SYS -> {
+                val cmdFrame = frame.parseCommandFrame() ?: return
+                when (cmdFrame.cmd) {
+                    ProtocolCommand.Sys.PONG,
+                    ProtocolCommand.Sys.INFO,
+                    ProtocolCommand.Sys.HEARTBEAT -> {
+                        Log.i(TAG, "收到SYS消息: cmd=0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}, len=${cmdFrame.payload.size}")
+                    }
+                    else -> {
+                        Log.d(TAG, "收到未知SYS cmd: 0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}")
+                    }
+                }
+            }
+
+            ProtocolFrameType.STATE -> {
+                val cmdFrame = frame.parseCommandFrame() ?: return
+                when (cmdFrame.cmd) {
+                    ProtocolCommand.State.SERVO -> {
+                        val servoState = ServoProtocolCodec.decodeStatePayload(cmdFrame.payload)
+                        if (servoState != null) {
+                            Log.i(
+                                TAG,
+                                "舵机状态: ID=${servoState.servoId}, PWM=${servoState.currentPwm}, moving=${servoState.moving}, remain=${servoState.remainingMs}"
+                            )
+                            updateServoFromResponse(servoState.servoId, servoState.currentPwm)
+                        } else {
+                            Log.w(TAG, "无效舵机状态帧, payload长度=${cmdFrame.payload.size}")
+                        }
+                    }
+                    else -> {
+                        Log.d(TAG, "收到STATE cmd: 0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}, len=${cmdFrame.payload.size}")
+                    }
+                }
+            }
+
+            else -> {
+                Log.d(TAG, "收到未处理帧类型: 0x${frame.type.toString(16)}")
+            }
+        }
+    }
 
     private fun updateServoFromResponse(servoId: Int, pwmValue: Int) {
         _uiState.update { currentState ->
