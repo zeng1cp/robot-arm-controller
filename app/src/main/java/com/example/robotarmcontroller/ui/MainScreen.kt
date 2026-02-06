@@ -129,7 +129,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {    
         bleViewModel.incomingFrames.collect { frame ->
             robotViewModel.onIncomingProtocolFrame(frame)
         }
@@ -197,11 +197,10 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     onAngleChange = robotViewModel::onAngleChange,
                     onAngleChangeFinished = robotViewModel::onAngleChangeFinished,
                     onToggleControlMode = robotViewModel::toggleControlMode,
-                    onSendTestClick = robotViewModel::sendTestMessage,
                     onClearHistoryClick = robotViewModel::clearHistory,
                     onServoEnableClick = robotViewModel::setServoEnable,
                     onServoDisableClick = robotViewModel::setServoDisable,
-                    onRequestServoStatusClick = robotViewModel::requestServoStatus,
+                    onSyncAllServoStatusClick = robotViewModel::requestAllServoStatus,
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f)

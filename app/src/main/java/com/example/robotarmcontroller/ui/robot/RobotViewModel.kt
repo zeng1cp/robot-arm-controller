@@ -281,6 +281,16 @@ class RobotViewModel : ViewModel() {
         }
     }
 
+    fun requestAllServoStatus() {
+        val ids = _uiState.value.servoList.map { it.id }
+        viewModelScope.launch {
+            ids.forEach { servoId ->
+                val success = bleService?.requestServoStatus(servoId) == true
+                Log.d(TAG, "请求舵机状态: id=$servoId success=$success")
+            }
+        }
+    }
+
     fun requestServoStatus(servoId: Int) {
         if (servoId !in _uiState.value.servoList.indices) {
             Log.w(TAG, "无效舵机ID: $servoId")

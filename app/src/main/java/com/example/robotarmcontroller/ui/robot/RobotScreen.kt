@@ -48,11 +48,10 @@ fun RobotScreen(
     onAngleChange: (Int, Float) -> Unit,
     onAngleChangeFinished: (Int) -> Unit,
     onToggleControlMode: () -> Unit,
-    onSendTestClick: () -> Unit,
     onClearHistoryClick: () -> Unit,
     onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
-    onRequestServoStatusClick: (Int) -> Unit,
+    onSyncAllServoStatusClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -60,9 +59,9 @@ fun RobotScreen(
             isConnected = state.isConnected,
             controlMode = state.controlMode,
             onToggleControlMode = onToggleControlMode,
-            onSendTestClick = onSendTestClick,
             onServoEnableClick = onServoEnableClick,
             onServoDisableClick = onServoDisableClick,
+            onSyncAllServoStatusClick = onSyncAllServoStatusClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -109,9 +108,9 @@ private fun RobotActionBar(
     isConnected: Boolean,
     controlMode: ControlMode,
     onToggleControlMode: () -> Unit,
-    onSendTestClick: () -> Unit,
-    onServoEnableClick: () -> Unit,
+       onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
+    onSyncAllServoStatusClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -129,7 +128,7 @@ private fun RobotActionBar(
             }
             Button(onClick = onServoEnableClick, enabled = isConnected) { Text("使能") }
             Button(onClick = onServoDisableClick, enabled = isConnected) { Text("失能") }
-            OutlinedButton(onClick = onSendTestClick, enabled = isConnected) { Text("Ping") }
+            OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步全部") }
         }
     }
 }
@@ -169,8 +168,7 @@ fun ServoControlCard(
     onPwmChange: (Float) -> Unit = {},
     onPwmChangeFinished: () -> Unit = {},
     onAngleChange: (Float) -> Unit = {},
-    onAngleChangeFinished: () -> Unit = {},
-    onRequestStatus: () -> Unit = {}
+    onAngleChangeFinished: () -> Unit = {}
 ) {
     Card(modifier = modifier.padding(2.dp)) {
         Column(
@@ -256,18 +254,6 @@ fun ServoControlCard(
                 }) { Icon(Icons.Filled.KeyboardDoubleArrowRight, contentDescription = "增加$bigStep") }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (controlMode == ControlMode.PWM) "PWM范围: 500-2500" else "角度范围: 0-270°",
-                    fontSize = 10.sp,
-                    color = Color.Gray
-                )
-                TextButton(onClick = onRequestStatus) { Text("同步状态", fontSize = 12.sp) }
-            }
         }
     }
 }
