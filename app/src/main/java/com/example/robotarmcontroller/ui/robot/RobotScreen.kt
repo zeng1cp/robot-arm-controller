@@ -103,12 +103,45 @@ fun RobotScreen(
     }
 }
 
+
+@Composable
+fun RobotScreen(
+    state: RobotUiState,
+    onPwmChange: (Int, Float) -> Unit,
+    onPwmChangeFinished: (Int) -> Unit,
+    onAngleChange: (Int, Float) -> Unit,
+    onAngleChangeFinished: (Int) -> Unit,
+    onToggleControlMode: () -> Unit,
+    onSendTestClick: () -> Unit,
+    onClearHistoryClick: () -> Unit,
+    onServoEnableClick: () -> Unit,
+    onServoDisableClick: () -> Unit,
+    onRequestServoStatusClick: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    RobotScreen(
+        state = state,
+        onPwmChange = onPwmChange,
+        onPwmChangeFinished = onPwmChangeFinished,
+        onAngleChange = onAngleChange,
+        onAngleChangeFinished = onAngleChangeFinished,
+        onToggleControlMode = onToggleControlMode,
+        onClearHistoryClick = onClearHistoryClick,
+        onServoEnableClick = onServoEnableClick,
+        onServoDisableClick = onServoDisableClick,
+        onSyncAllServoStatusClick = {
+            state.servoList.forEach { onRequestServoStatusClick(it.id) }
+        },
+        modifier = modifier
+    )
+}
+
 @Composable
 private fun RobotActionBar(
     isConnected: Boolean,
     controlMode: ControlMode,
     onToggleControlMode: () -> Unit,
-       onServoEnableClick: () -> Unit,
+    onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
     onSyncAllServoStatusClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -256,6 +289,29 @@ fun ServoControlCard(
 
         }
     }
+}
+
+
+@Composable
+fun ServoControlCard(
+    modifier: Modifier,
+    servo: ServoState,
+    controlMode: ControlMode,
+    onPwmChange: (Float) -> Unit,
+    onPwmChangeFinished: () -> Unit,
+    onAngleChange: (Float) -> Unit,
+    onAngleChangeFinished: () -> Unit,
+    onRequestStatus: () -> Unit
+) {
+    ServoControlCard(
+        modifier = modifier,
+        servo = servo,
+        controlMode = controlMode,
+        onPwmChange = onPwmChange,
+        onPwmChangeFinished = onPwmChangeFinished,
+        onAngleChange = onAngleChange,
+        onAngleChangeFinished = onAngleChangeFinished
+    )
 }
 
 @Composable
