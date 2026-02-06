@@ -129,7 +129,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit) {    
         bleViewModel.incomingFrames.collect { frame ->
             robotViewModel.onIncomingProtocolFrame(frame)
         }
