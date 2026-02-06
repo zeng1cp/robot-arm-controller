@@ -77,6 +77,7 @@ fun RobotScreen(
                 onPwmChangeFinished = onPwmChangeFinished,
                 onAngleChange = onAngleChange,
                 onAngleChangeFinished = onAngleChangeFinished,
+                onRequestServoStatusClick = onRequestServoStatusClick,
                 modifier = Modifier
                     .fillMaxSize()
                     .weight(1f)
@@ -173,6 +174,7 @@ fun ServoControlList(
     onPwmChangeFinished: (Int) -> Unit,
     onAngleChange: (Int, Float) -> Unit,
     onAngleChangeFinished: (Int) -> Unit,
+    onRequestServoStatusClick: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(modifier = modifier) {
@@ -184,6 +186,7 @@ fun ServoControlList(
                 onPwmChangeFinished = { onPwmChangeFinished(servo.id) },
                 onAngleChange = { onAngleChange(servo.id, it) },
                 onAngleChangeFinished = { onAngleChangeFinished(servo.id) },
+                onRequestStatus = { onRequestServoStatusClick(servo.id) },
                 modifier = Modifier.padding(vertical = 2.dp)
             )
         }
