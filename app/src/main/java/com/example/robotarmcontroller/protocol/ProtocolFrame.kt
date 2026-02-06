@@ -15,7 +15,6 @@ object ProtocolFrameType {
     const val SERVO: UInt = 0x10u
     const val MOTION: UInt = 0x11u
     const val ARM: UInt = 0x12u
-    const val MOTION_CYCLE: UInt = 0x13u
     const val STATE: UInt = 0xD0u
     const val CONFIG: UInt = 0xE0u
     const val DEBUG: UInt = 0xF0u
@@ -45,7 +44,23 @@ object ProtocolCommand {
         const val MOTION: UByte = 0x03u
         const val ARM: UByte = 0x04u
         const val CONFIG: UByte = 0x05u
-        const val MOTION_CYCLE: UByte = 0x06u
+    }
+
+    object Motion {
+        const val START: UByte = 0x01u
+        const val STOP: UByte = 0x02u
+        const val PAUSE: UByte = 0x03u
+        const val RESUME: UByte = 0x04u
+        const val SET_PLAN: UByte = 0x05u
+        const val GET_STATUS: UByte = 0x06u
+        const val STATUS: UByte = 0x07u
+        const val CYCLE_CREATE: UByte = 0x10u
+        const val CYCLE_START: UByte = 0x11u
+        const val CYCLE_RESTART: UByte = 0x12u
+        const val CYCLE_PAUSE: UByte = 0x13u
+        const val CYCLE_RELEASE: UByte = 0x14u
+        const val CYCLE_GET_STATUS: UByte = 0x15u
+        const val CYCLE_STATUS: UByte = 0x16u
     }
 }
 

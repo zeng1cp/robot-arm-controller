@@ -45,6 +45,7 @@ import com.example.robotarmcontroller.protocol.ServoSetPwmPayload
 import com.example.robotarmcontroller.protocol.SysProtocolCodec
 import com.example.robotarmcontroller.ui.ble.BleConnectionState
 import com.example.robotarmcontroller.ui.ble.BleScreen
+import com.example.robotarmcontroller.ui.motion.MotionScreen
 import com.example.robotarmcontroller.ui.ble.BleViewModel
 import com.example.robotarmcontroller.ui.robot.BleService
 import com.example.robotarmcontroller.ui.robot.RobotScreen
@@ -54,8 +55,7 @@ import kotlinx.coroutines.launch
 private enum class MainTab(val title: String) {
     SERVO("Servo"),
     MOTION("Motion"),
-    ARM("Arm"),
-    CYCLE("Cycle")
+    ARM("Arm")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -206,9 +206,21 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         .weight(1f)
                 )
 
-                MainTab.MOTION -> PlaceholderPage(title = "Motion 控制（待实现）")
+                MainTab.MOTION -> MotionScreen(
+                    onStartMotion = robotViewModel::startMotion,
+                    onStopMotion = robotViewModel::stopMotion,
+                    onPauseMotion = robotViewModel::pauseMotion,
+                    onResumeMotion = robotViewModel::resumeMotion,
+                    onGetMotionStatus = robotViewModel::requestMotionStatus,
+                    onCreateCycle = robotViewModel::createMotionCycle,
+                    onStartCycle = robotViewModel::startMotionCycle,
+                    onRestartCycle = robotViewModel::restartMotionCycle,
+                    onPauseCycle = robotViewModel::pauseMotionCycle,
+                    onReleaseCycle = robotViewModel::releaseMotionCycle,
+                    onGetCycleStatus = robotViewModel::requestMotionCycleStatus,
+                    modifier = Modifier.fillMaxSize().weight(1f)
+                )
                 MainTab.ARM -> PlaceholderPage(title = "Arm 控制（待实现）")
-                MainTab.CYCLE -> PlaceholderPage(title = "Motion Cycle 控制（待实现）")
             }
         }
     }

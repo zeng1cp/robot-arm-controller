@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.example.robotarmcontroller.protocol.ProtocolCommand
 import com.example.robotarmcontroller.protocol.ProtocolFrame
+import com.example.robotarmcontroller.protocol.MotionProtocolCodec
 import com.example.robotarmcontroller.protocol.ProtocolFrameType
 import com.example.robotarmcontroller.protocol.ServoProtocolCodec
 import com.example.robotarmcontroller.protocol.parseCommandFrame
@@ -175,6 +176,15 @@ class RobotViewModel : ViewModel() {
                             Log.w(TAG, "无效舵机状态帧, payload长度=${cmdFrame.payload.size}")
                         }
                     }
+                    ProtocolCommand.State.MOTION -> {
+                        val payload = cmdFrame.payload
+                        if (payload.size >= 4) {
+                            val gid = toIntLe(payload, 0)
+                            Log.i(TAG, "Motion状态: group=$gid len=${payload.size}")
+                        } else {
+                            Log.w(TAG, "无效Motion状态帧, payload长度=${payload.size}")
+                        }
+                    }
                     else -> {
                         Log.d(TAG, "收到STATE cmd: 0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}, len=${cmdFrame.payload.size}")
                     }
@@ -185,6 +195,13 @@ class RobotViewModel : ViewModel() {
                 Log.d(TAG, "收到未处理帧类型: 0x${frame.type.toString(16)}")
             }
         }
+    }
+
+    private fun toIntLe(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xFF) or
+            ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+            ((bytes[offset + 2].toInt() and 0xFF) shl 16) or
+            ((bytes[offset + 3].toInt() and 0xFF) shl 24)
     }
 
     private fun updateServoFromResponse(servoId: Int, pwmValue: Int) {
@@ -299,6 +316,100 @@ class RobotViewModel : ViewModel() {
         viewModelScope.launch {
             val success = bleService?.requestServoStatus(servoId) == true
             Log.d(TAG, "请求舵机状态: id=$servoId success=$success")
+        }
+    }
+
+    fun startMotion(mode: Int, ids: List<Int>, values: List<Float>, durationMs: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeStart(mode, ids, values, durationMs)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "启动Motion: success=$success")
+        }
+    }
+
+    fun stopMotion(groupId: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeStop(groupId)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "停止Motion: group=$groupId success=$success")
+        }
+    }
+
+    fun pauseMotion(groupId: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodePause(groupId)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "暂停Motion: group=$groupId success=$success")
+        }
+    }
+
+    fun resumeMotion(groupId: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeResume(groupId)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "继续Motion: group=$groupId success=$success")
+        }
+    }
+
+    fun requestMotionStatus(groupId: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeGetStatus(groupId)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "查询Motion状态: group=$groupId success=$success")
+        }
+    }
+
+    fun createMotionCycle(
+        mode: Int,
+        ids: List<Int>,
+        poses: List<List<Float>>,
+        durations: List<Int>,
+        maxLoops: Int
+    ) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeCycleCreate(mode, ids, poses, durations, maxLoops)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "创建MotionCycle: success=$success")
+        }
+    }
+
+    fun startMotionCycle(index: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeCycleStart(index)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "启动MotionCycle: idx=$index success=$success")
+        }
+    }
+
+    fun restartMotionCycle(index: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeCycleRestart(index)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "重启MotionCycle: idx=$index success=$success")
+        }
+    }
+
+    fun pauseMotionCycle(index: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeCyclePause(index)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "暂停MotionCycle: idx=$index success=$success")
+        }
+    }
+
+    fun releaseMotionCycle(index: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeCycleRelease(index)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "释放MotionCycle: idx=$index success=$success")
+        }
+    }
+
+    fun requestMotionCycleStatus(index: Int) {
+        viewModelScope.launch {
+            val data = MotionProtocolCodec.encodeCycleGetStatus(index)
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "查询MotionCycle状态: idx=$index success=$success")
         }
     }
 
