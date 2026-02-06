@@ -77,7 +77,6 @@ fun RobotScreen(
                 onPwmChangeFinished = onPwmChangeFinished,
                 onAngleChange = onAngleChange,
                 onAngleChangeFinished = onAngleChangeFinished,
-                onRequestServoStatusClick = onRequestServoStatusClick,
                 modifier = Modifier
                     .fillMaxSize()
                     .weight(1f)
@@ -157,11 +156,11 @@ private fun RobotActionBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedButton(onClick = onToggleControlMode, enabled = isConnected) {
-                Text(if (controlMode == ControlMode.PWM) "PWM模式" else "角度模式")
+                Text(if (controlMode == ControlMode.PWM) "PWM" else "角度")
             }
             Button(onClick = onServoEnableClick, enabled = isConnected) { Text("使能") }
             Button(onClick = onServoDisableClick, enabled = isConnected) { Text("失能") }
-            OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步全部") }
+            OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步") }
         }
     }
 }
@@ -174,7 +173,6 @@ fun ServoControlList(
     onPwmChangeFinished: (Int) -> Unit,
     onAngleChange: (Int, Float) -> Unit,
     onAngleChangeFinished: (Int) -> Unit,
-    onRequestServoStatusClick: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(modifier = modifier) {
@@ -186,7 +184,6 @@ fun ServoControlList(
                 onPwmChangeFinished = { onPwmChangeFinished(servo.id) },
                 onAngleChange = { onAngleChange(servo.id, it) },
                 onAngleChangeFinished = { onAngleChangeFinished(servo.id) },
-                onRequestStatus = { onRequestServoStatusClick(servo.id) },
                 modifier = Modifier.padding(vertical = 2.dp)
             )
         }
@@ -321,7 +318,9 @@ fun CommandHistoryPanel(
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier, elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp)) {
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
