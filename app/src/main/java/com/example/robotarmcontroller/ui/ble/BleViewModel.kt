@@ -6,11 +6,18 @@ import androidx.bluetooth.BluetoothDevice
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.robotarmcontroller.BleManager
+import com.example.robotarmcontroller.protocol.ProtocolFrame
 import com.example.robotarmcontroller.tinyframe.BleTinyFramePort
 import kotlinx.coroutines.Job
-import com.example.robotarmcontroller.protocol.ProtocolFrame
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val TAG = "BleViewModel"
@@ -28,7 +35,6 @@ class BleViewModel(
     private var scanResultCollectJob: Job? = null
     private var connectJob: Job? = null
 
-    // TinyFrame 解析后的帧共享流（用于向其他ViewModel发送数据）
     private val _incomingFrames = MutableSharedFlow<ProtocolFrame>(
         replay = 0,
         extraBufferCapacity = 64,

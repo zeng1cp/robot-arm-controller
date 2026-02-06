@@ -38,12 +38,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.robotarmcontroller.ui.ble.*
+import com.example.robotarmcontroller.protocol.ProtocolCommand
 import com.example.robotarmcontroller.protocol.ProtocolFrameType
 import com.example.robotarmcontroller.protocol.ServoProtocolCodec
 import com.example.robotarmcontroller.protocol.ServoSetPwmPayload
 import com.example.robotarmcontroller.protocol.SysProtocolCodec
-import com.example.robotarmcontroller.ui.robot.*
+import com.example.robotarmcontroller.ui.ble.BleConnectionState
+import com.example.robotarmcontroller.ui.ble.BleScreen
+import com.example.robotarmcontroller.ui.ble.BleViewModel
+import com.example.robotarmcontroller.ui.robot.BleService
+import com.example.robotarmcontroller.ui.robot.RobotScreen
+import com.example.robotarmcontroller.ui.robot.RobotViewModel
 import kotlinx.coroutines.launch
 
 private enum class MainTab(val title: String) {
@@ -74,6 +79,20 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         val data = ServoProtocolCodec.encodeSetPwm(
                             ServoSetPwmPayload(servoId = servoId, pwmValue = pwmValue)
                         )
+                        return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
+                    }
+
+                    override suspend fun setServoEnable(enable: Boolean): Boolean {
+                        val data = if (enable) {
+                            byteArrayOf(ProtocolCommand.Servo.ENABLE.toByte())
+                        } else {
+                            byteArrayOf(ProtocolCommand.Servo.DISABLE.toByte())
+                        }
+                        return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
+                    }
+
+                    override suspend fun requestServoStatus(servoId: Int): Boolean {
+                        val data = ServoProtocolCodec.encodeGetStatus(servoId)
                         return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
                     }
 
@@ -112,7 +131,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
 
     LaunchedEffect(Unit) {
         bleViewModel.incomingFrames.collect { frame ->
-            robotViewModel.handleIncomingFrame(frame)
+            robotViewModel.onIncomingProtocolFrame(frame)
         }
     }
 
