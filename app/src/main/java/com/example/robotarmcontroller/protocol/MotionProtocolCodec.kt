@@ -17,7 +17,7 @@ object MotionProtocolCodec {
         require(servoIds.size == values.size) { "values size must match ids size" }
 
         val count = servoIds.size
-        val header = ByteArray(6)
+        val header = ByteArray(7)
         header[0] = ProtocolCommand.Motion.START.toByte()
         header[1] = mode.toByte()
         header[2] = count.toByte()
