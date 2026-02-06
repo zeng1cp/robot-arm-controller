@@ -144,36 +144,48 @@ class RobotViewModel : ViewModel() {
         _uiState.update { it.copy(isConnected = false, connectionStatus = "未连接") }
     }
 
-//    fun setFrameHandler(handler: (FrameData) -> Unit) {
-//        this.frameCallback = handler
-//    }
-//
-//    fun receiveFrame(frameData: FrameData) {
-//        frameCallback?.invoke(frameData)
-//    }
-//
-//    private fun handleFrame(frameData: FrameData) {
-//        Log.d(TAG, "处理帧: type=0x${frameData.frameType.toString(16)}, len=${frameData.len}")
-//
-//        when (frameData.frameType) {
-//            0x22u -> {
-//                val message = String(frameData.data, 0, frameData.len)
-//                Log.i(TAG, "收到测试消息: $message")
-//            }
-//            0x23u -> {
-//                if (frameData.len >= 3) {
-//                    val servoId = frameData.data[0].toInt() and 0xFF
-//                    val pwmValue = ((frameData.data[1].toInt() and 0xFF) shl 8) or
-//                            (frameData.data[2].toInt() and 0xFF)
-//                    Log.i(TAG, "舵机响应: ID=$servoId, PWM=$pwmValue")
-//                    updateServoFromResponse(servoId, pwmValue)
-//                }
-//            }
-//            else -> {
-//                Log.d(TAG, "收到未知帧类型: 0x${frameData.frameType.toString(16)}")
-//            }
-//        }
-//    }
+    fun handleIncomingFrame(frame: ProtocolFrame) {
+        when (frame.type) {
+            ProtocolFrameType.SYS -> {
+                val cmdFrame = frame.parseCommandFrame() ?: return
+                when (cmdFrame.cmd) {
+                    ProtocolCommand.Sys.PONG,
+                    ProtocolCommand.Sys.INFO,
+                    ProtocolCommand.Sys.HEARTBEAT -> {
+                        Log.i(TAG, "收到SYS消息: cmd=0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}, len=${cmdFrame.payload.size}")
+                    }
+                    else -> {
+                        Log.d(TAG, "收到未知SYS cmd: 0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}")
+                    }
+                }
+            }
+
+            ProtocolFrameType.STATE -> {
+                val cmdFrame = frame.parseCommandFrame() ?: return
+                when (cmdFrame.cmd) {
+                    ProtocolCommand.State.SERVO -> {
+                        val servoState = ServoProtocolCodec.decodeStatePayload(cmdFrame.payload)
+                        if (servoState != null) {
+                            Log.i(
+                                TAG,
+                                "舵机状态: ID=${servoState.servoId}, PWM=${servoState.currentPwm}, moving=${servoState.moving}, remain=${servoState.remainingMs}"
+                            )
+                            updateServoFromResponse(servoState.servoId, servoState.currentPwm)
+                        } else {
+                            Log.w(TAG, "无效舵机状态帧, payload长度=${cmdFrame.payload.size}")
+                        }
+                    }
+                    else -> {
+                        Log.d(TAG, "收到STATE cmd: 0x${(cmdFrame.cmd.toInt() and 0xFF).toString(16)}, len=${cmdFrame.payload.size}")
+                    }
+                }
+            }
+
+            else -> {
+                Log.d(TAG, "收到未处理帧类型: 0x${frame.type.toString(16)}")
+            }
+        }
+    }
 
 
     fun handleIncomingFrame(frame: ProtocolFrame) {
@@ -298,6 +310,32 @@ class RobotViewModel : ViewModel() {
         sendServoCommand(servoId, newPwm.toInt())
     }
 
+
+    fun setServoEnable() {
+        viewModelScope.launch {
+            val success = bleService?.setServoEnable(true) == true
+            Log.d(TAG, "舵机使能命令发送: $success")
+        }
+    }
+
+    fun setServoDisable() {
+        viewModelScope.launch {
+            val success = bleService?.setServoEnable(false) == true
+            Log.d(TAG, "舵机失能命令发送: $success")
+        }
+    }
+
+    fun requestServoStatus(servoId: Int) {
+        if (servoId !in _uiState.value.servoList.indices) {
+            Log.w(TAG, "无效舵机ID: $servoId")
+            return
+        }
+        viewModelScope.launch {
+            val success = bleService?.requestServoStatus(servoId) == true
+            Log.d(TAG, "请求舵机状态: id=$servoId success=$success")
+        }
+    }
+
     private fun sendServoCommand(servoId: Int, pwmValue: Int) {
         viewModelScope.launch {
             bleService?.sendServoCommand(servoId, pwmValue)?.let { success ->
@@ -330,6 +368,8 @@ class RobotViewModel : ViewModel() {
 // BLE 服务接口
 interface BleService {
     suspend fun sendServoCommand(servoId: Int, pwmValue: Int): Boolean
+    suspend fun setServoEnable(enable: Boolean): Boolean
+    suspend fun requestServoStatus(servoId: Int): Boolean
     suspend fun sendTestMessage(message: String): Boolean
     suspend fun sendFrame(frameType: UInt, data: ByteArray): Boolean
 }
