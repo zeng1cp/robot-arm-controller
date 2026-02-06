@@ -29,19 +29,21 @@ fun BleScreen(
     onDeviceClick: (androidx.bluetooth.BluetoothDevice) -> Unit,
     onRefreshClick: () -> Unit,
     onDismissScanDialog: () -> Unit,
+    showStatusCard: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        // 蓝牙状态卡片
-        BleStatusCard(
-            connectionState = state.connectionState,
-            connectedDevice = state.connectedDevice,
-            onScanClick = onScanClick,
-            onDisconnectClick = onDisconnectClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        )
+    if (showStatusCard) {
+        Column(modifier = modifier) {
+            BleStatusCard(
+                connectionState = state.connectionState,
+                connectedDevice = state.connectedDevice,
+                onScanClick = onScanClick,
+                onDisconnectClick = onDisconnectClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
     }
 
     // 扫描设备弹窗
