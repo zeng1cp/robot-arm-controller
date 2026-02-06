@@ -320,6 +320,10 @@ class RobotViewModel : ViewModel() {
     }
 
     fun startMotion(mode: Int, ids: List<Int>, values: List<Float>, durationMs: Int) {
+        if (ids.isEmpty() || values.isEmpty() || ids.size != values.size) {
+            Log.w(TAG, "启动Motion失败: ids/values为空或长度不一致 ids=${ids.size} values=${values.size}")
+            return
+        }
         viewModelScope.launch {
             val data = MotionProtocolCodec.encodeStart(mode, ids, values, durationMs)
             val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
@@ -366,6 +370,23 @@ class RobotViewModel : ViewModel() {
         durations: List<Int>,
         maxLoops: Int
     ) {
+        if (ids.isEmpty()) {
+            Log.w(TAG, "创建MotionCycle失败: ids为空")
+            return
+        }
+        if (poses.isEmpty()) {
+            Log.w(TAG, "创建MotionCycle失败: poses为空")
+            return
+        }
+        if (poses.size != durations.size) {
+            Log.w(TAG, "创建MotionCycle失败: pose数量与duration数量不一致 poses=${poses.size} durations=${durations.size}")
+            return
+        }
+        val invalidPose = poses.firstOrNull { it.size != ids.size }
+        if (invalidPose != null) {
+            Log.w(TAG, "创建MotionCycle失败: pose维度与ids数量不一致 poseSize=${invalidPose.size} ids=${ids.size}")
+            return
+        }
         viewModelScope.launch {
             val data = MotionProtocolCodec.encodeCycleCreate(mode, ids, poses, durations, maxLoops)
             val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
