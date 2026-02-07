@@ -158,11 +158,11 @@ private fun RobotActionBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedButton(onClick = onToggleControlMode, enabled = isConnected) {
-                Text(if (controlMode == ControlMode.PWM) "PWM模式" else "角度模式")
+                Text(if (controlMode == ControlMode.PWM) "PWM" else "角度")
             }
             Button(onClick = onServoEnableClick, enabled = isConnected) { Text("使能") }
             Button(onClick = onServoDisableClick, enabled = isConnected) { Text("失能") }
-            OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步全部") }
+            OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步") }
         }
     }
 }
