@@ -170,7 +170,7 @@ class RobotViewModel : ViewModel() {
                         if (servoState != null) {
                             Log.i(
                                 TAG,
-                                "舵机状态: ID=${servoState.servoId}, PWM=${servoState.currentPwm}, moving=${servoState.moving}, remain=${servoState.remainingMs}"
+                                "舵机状态: subcmd=0x${servoState.subcmd.toString(16)}, ID=${servoState.servoId}, PWM=${servoState.currentPwm}, moving=${servoState.moving}, remain=${servoState.remainingMs}"
                             )
                             updateServoFromResponse(servoState.servoId, servoState.currentPwm)
                         } else {
@@ -220,6 +220,29 @@ class RobotViewModel : ViewModel() {
                                     )
                                 } else {
                                     Log.w(TAG, "无效MotionCycle状态帧, payload长度=${payload.size}")
+                                }
+                            }
+                            ProtocolCommand.Motion.STATUS.toInt() -> {
+                                if (payload.size >= 6) {
+                                    val gid = toIntLe(payload, 1)
+                                    val complete = payload[5].toInt() and 0xFF
+                                    Log.i(TAG, "Motion完成: group=$gid complete=$complete")
+                                } else {
+                                    Log.w(TAG, "无效Motion完成帧, payload长度=${payload.size}")
+                                }
+                            }
+                            ProtocolCommand.Motion.CYCLE_STATUS.toInt() -> {
+                                if (payload.size >= 14) {
+                                    val cycleIndex = toIntLe(payload, 1)
+                                    val loopCount = toIntLe(payload, 5)
+                                    val remaining = toIntLe(payload, 9)
+                                    val finished = payload[13].toInt() and 0xFF
+                                    Log.i(
+                                        TAG,
+                                        "MotionCycle回调: index=$cycleIndex loop=$loopCount remaining=$remaining finished=$finished"
+                                    )
+                                } else {
+                                    Log.w(TAG, "无效MotionCycle回调帧, payload长度=${payload.size}")
                                 }
                             }
                             else -> {

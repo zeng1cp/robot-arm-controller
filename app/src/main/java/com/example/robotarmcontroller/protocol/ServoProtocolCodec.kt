@@ -11,6 +11,7 @@ data class ServoSetPwmPayload(
 
 data class ServoStatePayload(
     val servoId: Int,
+    val subcmd: Int,
     val moving: Boolean,
     val currentPwm: Int,
     val targetAngleDeg: Float,
@@ -39,18 +40,20 @@ object ServoProtocolCodec {
     }
 
     fun decodeStatePayload(payload: ByteArray): ServoStatePayload? {
-        if (payload.size != 14) return null
+        if (payload.size != 18) return null
 
-        val id = payload[0].toInt() and 0xFF
-        val moving = payload[1].toInt() != 0
+        val subcmd = payload[0].toInt() and 0xFF
+        val id = ByteBuffer.wrap(payload, 1, 4).order(ByteOrder.LITTLE_ENDIAN).int
+        val moving = payload[5].toInt() != 0
 
-        val bb = ByteBuffer.wrap(payload, 2, 12).order(ByteOrder.LITTLE_ENDIAN)
+        val bb = ByteBuffer.wrap(payload, 6, 12).order(ByteOrder.LITTLE_ENDIAN)
         val currentPwm = bb.int
         val targetAngle = bb.float
         val remainingMs = bb.int
 
         return ServoStatePayload(
             servoId = id,
+            subcmd = subcmd,
             moving = moving,
             currentPwm = currentPwm,
             targetAngleDeg = targetAngle,
