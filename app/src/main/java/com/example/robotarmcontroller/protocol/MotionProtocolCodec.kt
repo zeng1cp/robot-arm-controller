@@ -60,7 +60,7 @@ object MotionProtocolCodec {
         val servoCount = servoIds.size
         val poseCount = poses.size
 
-        val header = ByteArray(7)
+        val header = ByteArray(8)
         header[0] = ProtocolCommand.Motion.CYCLE_CREATE.toByte()
         header[1] = mode.toByte()
         header[2] = servoCount.toByte()
