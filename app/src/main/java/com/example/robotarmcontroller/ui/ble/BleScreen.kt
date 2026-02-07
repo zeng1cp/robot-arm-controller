@@ -29,19 +29,21 @@ fun BleScreen(
     onDeviceClick: (androidx.bluetooth.BluetoothDevice) -> Unit,
     onRefreshClick: () -> Unit,
     onDismissScanDialog: () -> Unit,
+    showStatusCard: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        // 蓝牙状态卡片
-        BleStatusCard(
-            connectionState = state.connectionState,
-            connectedDevice = state.connectedDevice,
-            onScanClick = onScanClick,
-            onDisconnectClick = onDisconnectClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        )
+    if (showStatusCard) {
+        Column(modifier = modifier) {
+            BleStatusCard(
+                connectionState = state.connectionState,
+                connectedDevice = state.connectedDevice,
+                onScanClick = onScanClick,
+                onDisconnectClick = onDisconnectClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
     }
 
     // 扫描设备弹窗
@@ -68,7 +70,9 @@ fun BleStatusCard(
 ) {
     Card(
         modifier = modifier,
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
             modifier = Modifier
@@ -188,7 +192,10 @@ fun BleScanDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 200.dp, max = 500.dp),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(
                 modifier = Modifier
@@ -289,7 +296,9 @@ fun BleDeviceItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
