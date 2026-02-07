@@ -208,11 +208,19 @@ fun MainScreen(modifier: Modifier = Modifier) {
 
                 MainTab.MOTION -> MotionScreen(
                     currentGroupId = robotState.motionGroupId,
+                    servoInfo = robotState.servoList.map {
+                        com.example.robotarmcontroller.ui.motion.MotionServoInfo(
+                            id = it.id,
+                            name = it.name,
+                            isMoving = it.isMoving
+                        )
+                    },
                     onStartMotion = robotViewModel::startMotion,
                     onStopMotion = robotViewModel::stopMotion,
                     onPauseMotion = robotViewModel::pauseMotion,
                     onResumeMotion = robotViewModel::resumeMotion,
                     onGetMotionStatus = robotViewModel::requestMotionStatus,
+                    onPreviewServoValue = robotViewModel::previewServoValue,
                     onCreateCycle = robotViewModel::createMotionCycle,
                     onStartCycle = robotViewModel::startMotionCycle,
                     onRestartCycle = robotViewModel::restartMotionCycle,

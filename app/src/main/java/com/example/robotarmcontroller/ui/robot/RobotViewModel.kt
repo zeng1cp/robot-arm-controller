@@ -7,6 +7,7 @@ import com.example.robotarmcontroller.protocol.ProtocolFrame
 import com.example.robotarmcontroller.protocol.MotionProtocolCodec
 import com.example.robotarmcontroller.protocol.ProtocolFrameType
 import com.example.robotarmcontroller.protocol.ServoProtocolCodec
+import com.example.robotarmcontroller.protocol.ServoSetPwmPayload
 import com.example.robotarmcontroller.protocol.parseCommandFrame
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -472,6 +473,25 @@ class RobotViewModel : ViewModel() {
             val data = MotionProtocolCodec.encodeCycleGetStatus(index)
             val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
             Log.d(TAG, "查询MotionCycle状态: idx=$index success=$success")
+        }
+    }
+
+    fun previewServoValue(servoId: Int, mode: Int, value: Float) {
+        if (servoId !in _uiState.value.servoList.indices) {
+            Log.w(TAG, "预览舵机失败: 无效舵机ID $servoId")
+            return
+        }
+        val pwmValue = if (mode == MotionProtocolCodec.MODE_PWM) {
+            value.toInt().coerceIn(500, 2500)
+        } else {
+            angleToPwm(value.coerceIn(0f, 270f)).toInt()
+        }
+        viewModelScope.launch {
+            val data = ServoProtocolCodec.encodeSetPwm(
+                ServoSetPwmPayload(servoId = servoId, pwmValue = pwmValue, durationMs = 0)
+            )
+            val success = bleService?.sendFrame(ProtocolFrameType.SERVO, data) == true
+            Log.d(TAG, "预览舵机: id=$servoId pwm=$pwmValue success=$success")
         }
     }
 
