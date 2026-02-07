@@ -38,7 +38,7 @@ class RobotViewModel : ViewModel() {
                 ServoState(1, "肩部", 1500f, 135f),
                 ServoState(2, "肘部", 1500f, 135f),
                 ServoState(3, "腕部", 1500f, 135f),
-                ServoState(4, "手腕旋转", 1500f, 135f),
+                ServoState(4, "手腕", 1500f, 135f),
                 ServoState(5, "夹爪", 1500f, 135f),
             )
             currentState.copy(servoList = newList)

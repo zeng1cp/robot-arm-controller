@@ -135,6 +135,7 @@ fun RobotScreen(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RobotActionBar(
     isConnected: Boolean,
@@ -151,18 +152,19 @@ private fun RobotActionBar(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Row(
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedButton(onClick = onToggleControlMode, enabled = isConnected) {
-                Text(if (controlMode == ControlMode.PWM) "PWM模式" else "角度模式")
+                Text(if (controlMode == ControlMode.PWM) "PWM" else "角度")
             }
             Button(onClick = onServoEnableClick, enabled = isConnected) { Text("使能") }
             Button(onClick = onServoDisableClick, enabled = isConnected) { Text("失能") }
-            OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步全部") }
+            OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步") }
         }
     }
 }

@@ -3,6 +3,8 @@ package com.example.robotarmcontroller.ui.motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,7 +42,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.example.robotarmcontroller.protocol.MotionProtocolCodec
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.snapshotFlow
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class MotionServoInfo(
     val id: Int,
@@ -65,6 +73,10 @@ private data class MotionPreset(
     val groupId: Int = 0
 )
 
+private const val PRESET_PREFS_NAME = "motion_presets"
+private const val PRESET_KEY = "preset_list"
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MotionScreen(
     modifier: Modifier = Modifier,
@@ -89,6 +101,7 @@ fun MotionScreen(
     onReleaseCycle: (index: Int) -> Unit,
     onGetCycleStatus: (index: Int) -> Unit
 ) {
+    val context = LocalContext.current
     val presets = remember { mutableStateListOf<MotionPreset>() }
     var showPresets by remember { mutableStateOf(true) }
     var maxPresetCount by remember { mutableStateOf("10") }
@@ -103,6 +116,20 @@ fun MotionScreen(
     var cycleIndexText by remember { mutableStateOf("0") }
 
     var groupIdText by remember { mutableStateOf(currentGroupId.toString()) }
+
+    LaunchedEffect(Unit) {
+        val loaded = loadPresets(context)
+        if (loaded.isNotEmpty()) {
+            presets.addAll(loaded)
+            nextPresetId = (loaded.maxOfOrNull { it.id } ?: 0) + 1
+        }
+    }
+
+    LaunchedEffect(presets) {
+        snapshotFlow { presets.toList() }
+            .distinctUntilChanged()
+            .collectLatest { savePresets(context, it) }
+    }
 
     LaunchedEffect(currentGroupId) {
         groupIdText = currentGroupId.toString()
@@ -203,45 +230,29 @@ fun MotionScreen(
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("舵机运行状态", style = MaterialTheme.typography.titleMedium)
-                servoInfo.forEach { servo ->
-                    val occupiedBy = occupancyMap[servo.id]
-                    val statusText = if (servo.isMoving) "运行中" else "空闲"
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${servo.name} (#${servo.id})")
-                        Text(
-                            text = if (occupiedBy != null) "占用: $occupiedBy" else statusText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (occupiedBy != null) Color(0xFF1565C0) else Color.Gray
-                        )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    servoInfo.forEach { servo ->
+                        val occupiedBy = occupancyMap[servo.id]
+                        val statusText = if (servo.isMoving) "运行中" else "空闲"
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.width(150.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("${servo.name} #${servo.id}", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    text = if (occupiedBy != null) "占用: $occupiedBy" else statusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (occupiedBy != null) Color(0xFF1565C0) else Color.Gray
+                                )
+                            }
+                        }
                     }
-                }
-            }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Cycle 控制", style = MaterialTheme.typography.titleMedium)
-                TextField(
-                    value = cycleIndexText,
-                    onValueChange = { cycleIndexText = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Cycle index") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onStartCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("启动") }
-                    OutlinedButton(onClick = { onRestartCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("重启") }
-                    OutlinedButton(onClick = { onPauseCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("暂停") }
-                    OutlinedButton(onClick = { onReleaseCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("释放") }
-                    OutlinedButton(onClick = { onGetCycleStatus(cycleIndexText.toIntOrNull() ?: 0) }) { Text("状态") }
                 }
             }
         }
@@ -263,11 +274,11 @@ fun MotionScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { showPresetDialog = true }) { Text("添加预设 Motion") }
                     OutlinedButton(onClick = { showCycleDialog = true }) { Text("创建 Cycle") }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { onStopMotion(groupIdText.toIntOrNull() ?: 0) }) { Text("停止") }
                     OutlinedButton(onClick = { onPauseMotion(groupIdText.toIntOrNull() ?: 0) }) { Text("暂停") }
                     OutlinedButton(onClick = { onResumeMotion(groupIdText.toIntOrNull() ?: 0) }) { Text("继续") }
@@ -335,6 +346,30 @@ fun MotionScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Cycle 控制", style = MaterialTheme.typography.titleMedium)
+                TextField(
+                    value = cycleIndexText,
+                    onValueChange = { cycleIndexText = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("Cycle index") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onStartCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("启动") }
+                    OutlinedButton(onClick = { onRestartCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("重启") }
+                    OutlinedButton(onClick = { onPauseCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("暂停") }
+                    OutlinedButton(onClick = { onReleaseCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("释放") }
+                    OutlinedButton(onClick = { onGetCycleStatus(cycleIndexText.toIntOrNull() ?: 0) }) { Text("状态") }
                 }
             }
         }
@@ -439,6 +474,7 @@ private fun detectConflicts(
     return conflicts.distinct().joinToString("\n")
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MotionPresetCard(
     preset: MotionPreset,
@@ -481,7 +517,7 @@ private fun MotionPresetCard(
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onStart) { Text("开始") }
                 OutlinedButton(onClick = onStop) { Text("停止") }
                 OutlinedButton(onClick = onPause, enabled = preset.groupId > 0) { Text("暂停") }
@@ -680,4 +716,67 @@ private fun MotionCycleDialog(
             TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
+}
+
+private fun loadPresets(context: android.content.Context): List<MotionPreset> {
+    val prefs = context.getSharedPreferences(PRESET_PREFS_NAME, android.content.Context.MODE_PRIVATE)
+    val raw = prefs.getString(PRESET_KEY, null) ?: return emptyList()
+    return runCatching {
+        val array = JSONArray(raw)
+        buildList {
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val ids = obj.getJSONArray("servoIds").toIntList()
+                val values = obj.getJSONArray("values").toFloatList()
+                add(
+                    MotionPreset(
+                        id = obj.optInt("id", i + 1),
+                        name = obj.optString("name", "预设动作"),
+                        mode = obj.optInt("mode", MotionProtocolCodec.MODE_PWM),
+                        durationMs = obj.optInt("durationMs", 0),
+                        servoIds = ids,
+                        values = values,
+                        realtime = obj.optBoolean("realtime", false),
+                        status = null,
+                        groupId = 0
+                    )
+                )
+            }
+        }
+    }.getOrDefault(emptyList())
+}
+
+private fun savePresets(context: android.content.Context, presets: List<MotionPreset>) {
+    val array = JSONArray()
+    presets.forEach { preset ->
+        val obj = JSONObject()
+        obj.put("id", preset.id)
+        obj.put("name", preset.name)
+        obj.put("mode", preset.mode)
+        obj.put("durationMs", preset.durationMs)
+        obj.put("realtime", preset.realtime)
+        obj.put("servoIds", JSONArray(preset.servoIds))
+        obj.put("values", JSONArray(preset.values))
+        array.put(obj)
+    }
+    context.getSharedPreferences(PRESET_PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        .edit()
+        .putString(PRESET_KEY, array.toString())
+        .apply()
+}
+
+private fun JSONArray.toIntList(): List<Int> {
+    val list = mutableListOf<Int>()
+    for (i in 0 until length()) {
+        list.add(optInt(i))
+    }
+    return list
+}
+
+private fun JSONArray.toFloatList(): List<Float> {
+    val list = mutableListOf<Float>()
+    for (i in 0 until length()) {
+        list.add(optDouble(i).toFloat())
+    }
+    return list
 }
