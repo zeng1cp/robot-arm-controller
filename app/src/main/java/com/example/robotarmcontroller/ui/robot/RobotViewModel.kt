@@ -180,6 +180,7 @@ class RobotViewModel : ViewModel() {
                         val payload = cmdFrame.payload
                         if (payload.size >= 4) {
                             val gid = toIntLe(payload, 0)
+                            _uiState.update { it.copy(motionGroupId = gid) }
                             Log.i(TAG, "Motion状态: group=$gid len=${payload.size}")
                         } else {
                             Log.w(TAG, "无效Motion状态帧, payload长度=${payload.size}")

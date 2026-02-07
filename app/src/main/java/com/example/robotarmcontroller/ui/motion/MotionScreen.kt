@@ -16,6 +16,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun MotionScreen(
     modifier: Modifier = Modifier,
+    currentGroupId: Int = 0,
     onStartMotion: (mode: Int, ids: List<Int>, values: List<Float>, durationMs: Int) -> Unit,
     onStopMotion: (groupId: Int) -> Unit,
     onPauseMotion: (groupId: Int) -> Unit,
@@ -51,7 +53,11 @@ fun MotionScreen(
     var idsText by remember { mutableStateOf("0,1,2") }
     var valuesText by remember { mutableStateOf("1500,1500,1500") }
     var durationText by remember { mutableStateOf("500") }
-    var groupIdText by remember { mutableStateOf("0") }
+    var groupIdText by remember { mutableStateOf(currentGroupId.toString()) }
+
+    LaunchedEffect(currentGroupId) {
+        groupIdText = currentGroupId.toString()
+    }
 
     var poseText by remember { mutableStateOf("1500,1500,1500|1600,1600,1600") }
     var durationsText by remember { mutableStateOf("500,500") }

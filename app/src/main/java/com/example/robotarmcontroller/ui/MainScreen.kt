@@ -207,6 +207,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 )
 
                 MainTab.MOTION -> MotionScreen(
+                    currentGroupId = robotState.motionGroupId,
                     onStartMotion = robotViewModel::startMotion,
                     onStopMotion = robotViewModel::stopMotion,
                     onPauseMotion = robotViewModel::pauseMotion,
