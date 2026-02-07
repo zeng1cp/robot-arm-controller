@@ -178,12 +178,52 @@ class RobotViewModel : ViewModel() {
                     }
                     ProtocolCommand.State.MOTION -> {
                         val payload = cmdFrame.payload
-                        if (payload.size >= 4) {
-                            val gid = toIntLe(payload, 0)
-                            _uiState.update { it.copy(motionGroupId = gid) }
-                            Log.i(TAG, "Motion状态: group=$gid len=${payload.size}")
-                        } else {
-                            Log.w(TAG, "无效Motion状态帧, payload长度=${payload.size}")
+                        if (payload.isEmpty()) {
+                            Log.w(TAG, "无效Motion状态帧, payload为空")
+                            return
+                        }
+                        val subcmd = payload[0].toInt() and 0xFF
+                        when (subcmd) {
+                            ProtocolCommand.Motion.START.toInt(),
+                            ProtocolCommand.Motion.GET_STATUS.toInt() -> {
+                                if (payload.size >= 5) {
+                                    val gid = toIntLe(payload, 1)
+                                    _uiState.update { it.copy(motionGroupId = gid) }
+                                    Log.i(TAG, "Motion状态: subcmd=0x${subcmd.toString(16)} group=$gid len=${payload.size}")
+                                } else {
+                                    Log.w(TAG, "无效Motion状态帧, subcmd=0x${subcmd.toString(16)} payload长度=${payload.size}")
+                                }
+                            }
+                            ProtocolCommand.Motion.CYCLE_CREATE.toInt() -> {
+                                if (payload.size >= 5) {
+                                    val cycleIndex = toIntLe(payload, 1)
+                                    Log.i(TAG, "MotionCycle创建: index=$cycleIndex")
+                                } else {
+                                    Log.w(TAG, "无效MotionCycle创建帧, payload长度=${payload.size}")
+                                }
+                            }
+                            ProtocolCommand.Motion.CYCLE_GET_STATUS.toInt() -> {
+                                if (payload.size >= 21) {
+                                    val cycleIndex = toIntLe(payload, 1)
+                                    val active = payload[5].toInt() and 0xFF
+                                    val running = payload[6].toInt() and 0xFF
+                                    val currentPose = payload[7].toInt() and 0xFF
+                                    val poseCount = payload[8].toInt() and 0xFF
+                                    val loopCount = toIntLe(payload, 9)
+                                    val maxLoops = toIntLe(payload, 13)
+                                    val activeGroupId = toIntLe(payload, 17)
+                                    _uiState.update { it.copy(motionGroupId = activeGroupId) }
+                                    Log.i(
+                                        TAG,
+                                        "MotionCycle状态: index=$cycleIndex active=$active running=$running pose=$currentPose/$poseCount loops=$loopCount/$maxLoops group=$activeGroupId"
+                                    )
+                                } else {
+                                    Log.w(TAG, "无效MotionCycle状态帧, payload长度=${payload.size}")
+                                }
+                            }
+                            else -> {
+                                Log.d(TAG, "收到Motion状态帧: subcmd=0x${subcmd.toString(16)} len=${payload.size}")
+                            }
                         }
                     }
                     else -> {
