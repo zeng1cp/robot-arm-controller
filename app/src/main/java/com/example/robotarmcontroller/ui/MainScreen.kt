@@ -208,6 +208,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
 
                 MainTab.MOTION -> MotionScreen(
                     currentGroupId = robotState.motionGroupId,
+                    motionCompleteGroupId = robotState.motionCompleteGroupId,
                     servoInfo = robotState.servoList.map {
                         com.example.robotarmcontroller.ui.motion.MotionServoInfo(
                             id = it.id,

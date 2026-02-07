@@ -226,6 +226,9 @@ class RobotViewModel : ViewModel() {
                                 if (payload.size >= 6) {
                                     val gid = toIntLe(payload, 1)
                                     val complete = payload[5].toInt() and 0xFF
+                                    if (complete != 0) {
+                                        _uiState.update { it.copy(motionCompleteGroupId = gid) }
+                                    }
                                     Log.i(TAG, "Motion完成: group=$gid complete=$complete")
                                 } else {
                                     Log.w(TAG, "无效Motion完成帧, payload长度=${payload.size}")

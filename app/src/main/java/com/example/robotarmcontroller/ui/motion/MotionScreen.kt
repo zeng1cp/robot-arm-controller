@@ -81,6 +81,7 @@ private const val PRESET_KEY = "preset_list"
 fun MotionScreen(
     modifier: Modifier = Modifier,
     currentGroupId: Int = 0,
+    motionCompleteGroupId: Int = 0,
     servoInfo: List<MotionServoInfo> = emptyList(),
     onStartMotion: (mode: Int, ids: List<Int>, values: List<Float>, durationMs: Int) -> Unit,
     onStopMotion: (groupId: Int) -> Unit,
@@ -107,6 +108,7 @@ fun MotionScreen(
     var maxPresetCount by remember { mutableStateOf("10") }
     var nextPresetId by remember { mutableIntStateOf(1) }
     var pendingGroupPresetId by remember { mutableStateOf<Int?>(null) }
+    var lastHandledCompleteGroupId by remember { mutableIntStateOf(0) }
 
     var showPresetDialog by remember { mutableStateOf(false) }
     var showCycleDialog by remember { mutableStateOf(false) }
@@ -144,6 +146,16 @@ fun MotionScreen(
                 )
             }
             pendingGroupPresetId = null
+        }
+    }
+
+    LaunchedEffect(motionCompleteGroupId) {
+        if (motionCompleteGroupId > 0 && motionCompleteGroupId != lastHandledCompleteGroupId) {
+            val index = presets.indexOfFirst { it.groupId == motionCompleteGroupId }
+            if (index >= 0) {
+                updatePresetStatus(presets, presets[index].id, null, clearGroup = true)
+            }
+            lastHandledCompleteGroupId = motionCompleteGroupId
         }
     }
 
