@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,10 +42,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.example.robotarmcontroller.protocol.MotionProtocolCodec
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.snapshotFlow
@@ -70,7 +77,9 @@ private data class MotionPreset(
     val values: List<Float>,
     val realtime: Boolean,
     val status: MotionPresetStatus? = null,
-    val groupId: Int = 0
+    val groupId: Int = 0,
+    val startedAtMs: Long? = null,
+    val elapsedMs: Long = 0
 )
 
 private const val PRESET_PREFS_NAME = "motion_presets"
@@ -109,6 +118,7 @@ fun MotionScreen(
     var nextPresetId by remember { mutableIntStateOf(1) }
     var pendingGroupPresetId by remember { mutableStateOf<Int?>(null) }
     var lastHandledCompleteGroupId by remember { mutableIntStateOf(0) }
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
 
     var showPresetDialog by remember { mutableStateOf(false) }
     var showCycleDialog by remember { mutableStateOf(false) }
@@ -142,7 +152,9 @@ fun MotionScreen(
                 val preset = presets[index]
                 presets[index] = preset.copy(
                     groupId = currentGroupId,
-                    status = MotionPresetStatus.RUNNING
+                    status = MotionPresetStatus.RUNNING,
+                    startedAtMs = System.currentTimeMillis(),
+                    elapsedMs = 0
                 )
             }
             pendingGroupPresetId = null
@@ -173,6 +185,18 @@ fun MotionScreen(
     val occupancyMap = activePresets
         .flatMap { preset -> preset.servoIds.map { it to preset.name } }
         .toMap()
+    val activePresetByServo = activePresets
+        .flatMap { preset -> preset.servoIds.map { it to preset } }
+        .toMap()
+
+    LaunchedEffect(activePresets.size) {
+        while (true) {
+            if (activePresets.isNotEmpty()) {
+                nowMs = System.currentTimeMillis()
+            }
+            delay(120)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -242,26 +266,27 @@ fun MotionScreen(
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("舵机运行状态", style = MaterialTheme.typography.titleMedium)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    servoInfo.forEach { servo ->
-                        val occupiedBy = occupancyMap[servo.id]
-                        val statusText = if (servo.isMoving) "运行中" else "空闲"
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            modifier = Modifier.width(150.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("${servo.name} #${servo.id}", style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    text = if (occupiedBy != null) "占用: $occupiedBy" else statusText,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (occupiedBy != null) Color(0xFF1565C0) else Color.Gray
-                                )
+                val rows = servoInfo.take(6).chunked(3)
+                rows.forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { servo ->
+                            val occupiedBy = occupancyMap[servo.id]
+                            val statusText = if (servo.isMoving) "运行中" else "空闲"
+                            val preset = activePresetByServo[servo.id]
+                            val progress = calculateServoProgress(preset, nowMs)
+                            ServoStatusCard(
+                                name = servo.name,
+                                id = servo.id,
+                                occupiedBy = occupiedBy,
+                                statusText = statusText,
+                                isMoving = servo.isMoving,
+                                progress = progress,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (row.size < 3) {
+                            repeat(3 - row.size) {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
@@ -462,9 +487,26 @@ private fun updatePresetStatus(
     val index = presets.indexOfFirst { it.id == presetId }
     if (index >= 0) {
         val preset = presets[index]
+        val now = System.currentTimeMillis()
+        val elapsed = when {
+            status == MotionPresetStatus.PAUSED && preset.startedAtMs != null ->
+                preset.elapsedMs + (now - preset.startedAtMs)
+            status == MotionPresetStatus.RUNNING && preset.status == MotionPresetStatus.PAUSED ->
+                preset.elapsedMs
+            status == null -> 0
+            else -> preset.elapsedMs
+        }
+        val startedAt = when {
+            status == MotionPresetStatus.RUNNING && preset.groupId > 0 && preset.startedAtMs == null -> now
+            status == MotionPresetStatus.PAUSED -> null
+            status == null -> null
+            else -> preset.startedAtMs
+        }
         presets[index] = preset.copy(
             status = status,
-            groupId = if (clearGroup) 0 else preset.groupId
+            groupId = if (clearGroup) 0 else preset.groupId,
+            startedAtMs = if (clearGroup) null else startedAt,
+            elapsedMs = elapsed
         )
     }
 }
@@ -484,6 +526,85 @@ private fun detectConflicts(
             }
     }
     return conflicts.distinct().joinToString("\n")
+}
+
+private fun calculateServoProgress(preset: MotionPreset?, nowMs: Long): Float {
+    if (preset == null || preset.status != MotionPresetStatus.RUNNING) return 0f
+    val duration = preset.durationMs.takeIf { it > 0 } ?: return 0f
+    val startedAt = preset.startedAtMs ?: return 0f
+    val elapsed = (preset.elapsedMs + (nowMs - startedAt)).coerceAtLeast(0)
+    return (elapsed.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+}
+
+@Composable
+private fun ServoStatusCard(
+    name: String,
+    id: Int,
+    occupiedBy: String?,
+    statusText: String,
+    isMoving: Boolean,
+    progress: Float,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 12.dp,
+    strokeWidth: Dp = 3.dp
+) {
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
+    val progressColor = if (isMoving) Color(0xFF2E7D32) else borderColor
+    val shape = RoundedCornerShape(cornerRadius)
+    Column(
+        modifier = modifier
+            .height(84.dp)
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .drawProgressBorder(
+                shape = shape,
+                borderColor = borderColor,
+                progressColor = progressColor,
+                progress = progress,
+                strokeWidth = strokeWidth
+            )
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text("$name #$id", style = MaterialTheme.typography.bodySmall)
+        Text(
+            text = if (occupiedBy != null) "占用: $occupiedBy" else statusText,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (occupiedBy != null) Color(0xFF1565C0) else Color.Gray
+        )
+    }
+}
+
+private fun Modifier.drawProgressBorder(
+    shape: RoundedCornerShape,
+    borderColor: Color,
+    progressColor: Color,
+    progress: Float,
+    strokeWidth: Dp
+) = drawBehind {
+    val strokePx = strokeWidth.toPx()
+    val inset = strokePx / 2f
+    val size = size.copy(width = size.width - strokePx, height = size.height - strokePx)
+    val corner = shape.topStart.toPx(size, layoutDirection)
+    val cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner, corner)
+
+    translate(inset, inset) {
+        drawRoundRect(
+            color = borderColor,
+            size = size,
+            cornerRadius = cornerRadius,
+            style = Stroke(width = strokePx)
+        )
+        if (progress > 0f) {
+            drawArc(
+                color = progressColor,
+                startAngle = -90f,
+                sweepAngle = 360f * progress,
+                useCenter = false,
+                size = size,
+                style = Stroke(width = strokePx, cap = StrokeCap.Round)
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
