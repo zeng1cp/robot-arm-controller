@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -66,6 +67,7 @@ data class MotionServoInfo(
 )
 
 private enum class MotionPresetStatus {
+    PENDING,
     RUNNING,
     PAUSED
 }
@@ -128,6 +130,10 @@ fun MotionScreen(
     var conflictMessage by remember { mutableStateOf("") }
     var cycleIndexText by remember { mutableStateOf("0") }
     var editingPresetId by remember { mutableStateOf<Int?>(null) }
+    var pendingStartAtMs by remember { mutableStateOf<Long?>(null) }
+    var showStartFailureDialog by remember { mutableStateOf(false) }
+    var startFailureMessage by remember { mutableStateOf("") }
+    var pendingDeletePresetId by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(Unit) {
         val loaded = loadPresets(context)
@@ -157,6 +163,7 @@ fun MotionScreen(
                 )
             }
             pendingGroupPresetId = null
+            pendingStartAtMs = null
         }
     }
 
@@ -189,6 +196,19 @@ fun MotionScreen(
         }
     }
 
+    LaunchedEffect(pendingGroupPresetId, pendingStartAtMs) {
+        val pendingId = pendingGroupPresetId ?: return@LaunchedEffect
+        val startedAt = pendingStartAtMs ?: return@LaunchedEffect
+        delay(1200)
+        if (pendingGroupPresetId == pendingId && currentGroupId <= 0 && pendingStartAtMs == startedAt) {
+            updatePresetStatus(presets, pendingId, null, clearGroup = true)
+            pendingGroupPresetId = null
+            pendingStartAtMs = null
+            startFailureMessage = "启动 Motion 失败：未收到有效的 groupId。"
+            showStartFailureDialog = true
+        }
+    }
+
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -205,6 +225,7 @@ fun MotionScreen(
                     Text("正在活跃的 Motion", style = MaterialTheme.typography.titleMedium)
                     activePresets.forEach { preset ->
                         val statusColor = when (preset.status) {
+                            MotionPresetStatus.PENDING -> Color(0xFF5C6BC0)
                             MotionPresetStatus.RUNNING -> Color(0xFF2E7D32)
                             MotionPresetStatus.PAUSED -> Color(0xFF757575)
                             null -> MaterialTheme.colorScheme.outline
@@ -239,6 +260,7 @@ fun MotionScreen(
                                             updatePresetStatus(presets, preset.id, MotionPresetStatus.RUNNING)
                                         }
                                     }
+                                    MotionPresetStatus.PENDING -> Unit
                                     null -> Unit
                                 }
                             }) {
@@ -323,8 +345,9 @@ fun MotionScreen(
                                             return@MotionPresetCard
                                         }
                                         pendingGroupPresetId = preset.id
+                                        pendingStartAtMs = System.currentTimeMillis()
                                         onStartMotion(preset.mode, preset.servoIds, preset.values, preset.durationMs)
-                                        updatePresetStatus(presets, preset.id, MotionPresetStatus.RUNNING)
+                                        updatePresetStatus(presets, preset.id, MotionPresetStatus.PENDING)
                                     },
                                     onStop = {
                                         if (preset.groupId > 0) {
@@ -349,10 +372,7 @@ fun MotionScreen(
                                         showPresetDialog = true
                                     },
                                     onDelete = {
-                                        val index = presets.indexOfFirst { it.id == preset.id }
-                                        if (index >= 0) {
-                                            presets.removeAt(index)
-                                        }
+                                        pendingDeletePresetId = preset.id
                                     }
                                 )
                             }
@@ -456,6 +476,40 @@ fun MotionScreen(
         )
     }
 
+    if (showStartFailureDialog) {
+        AlertDialog(
+            onDismissRequest = { showStartFailureDialog = false },
+            title = { Text("启动失败") },
+            text = { Text(startFailureMessage) },
+            confirmButton = {
+                TextButton(onClick = { showStartFailureDialog = false }) { Text("知道了") }
+            }
+        )
+    }
+
+    if (pendingDeletePresetId != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeletePresetId = null },
+            title = { Text("删除预设") },
+            text = { Text("确定要删除这个预设动作吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = pendingDeletePresetId
+                    if (id != null) {
+                        val index = presets.indexOfFirst { it.id == id }
+                        if (index >= 0) {
+                            presets.removeAt(index)
+                        }
+                    }
+                    pendingDeletePresetId = null
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeletePresetId = null }) { Text("取消") }
+            }
+        )
+    }
+
 }
 
 private fun updatePresetStatus(
@@ -473,11 +527,13 @@ private fun updatePresetStatus(
                 preset.elapsedMs + (now - preset.startedAtMs)
             status == MotionPresetStatus.RUNNING && preset.status == MotionPresetStatus.PAUSED ->
                 preset.elapsedMs
+            status == MotionPresetStatus.PENDING -> 0
             status == null -> 0
             else -> preset.elapsedMs
         }
         val startedAt = when {
             status == MotionPresetStatus.RUNNING && preset.groupId > 0 && preset.startedAtMs == null -> now
+            status == MotionPresetStatus.PENDING -> null
             status == MotionPresetStatus.PAUSED -> null
             status == null -> null
             else -> preset.startedAtMs
@@ -609,11 +665,13 @@ private fun MotionPresetCard(
     onDelete: () -> Unit
 ) {
     val statusText = when (preset.status) {
+        MotionPresetStatus.PENDING -> "等待中"
         MotionPresetStatus.RUNNING -> "运行中"
         MotionPresetStatus.PAUSED -> "已暂停"
         null -> "未运行"
     }
     val statusColor = when (preset.status) {
+        MotionPresetStatus.PENDING -> Color(0xFF5C6BC0)
         MotionPresetStatus.RUNNING -> Color(0xFF2E7D32)
         MotionPresetStatus.PAUSED -> Color(0xFF757575)
         null -> Color.Gray
@@ -726,7 +784,13 @@ private fun MotionPresetDialog(
                 ) {
                     servoInfo.take(6).forEach { servo ->
                         val selected = selectedIds.contains(servo.id)
-                        OutlinedButton(
+                        val buttonColors = if (selected) {
+                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        } else {
+                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        }
+                        Button(
+                            colors = buttonColors,
                             onClick = {
                                 if (selected) {
                                     selectedIds.remove(servo.id)
@@ -739,7 +803,7 @@ private fun MotionPresetDialog(
                                 }
                             }
                         ) {
-                            Text(if (selected) "✓ ${servo.name}" else servo.name)
+                            Text(servo.name, color = if (selected) Color.White else Color.Black)
                         }
                     }
                 }
