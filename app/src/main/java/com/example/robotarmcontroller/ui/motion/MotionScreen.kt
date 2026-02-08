@@ -86,6 +86,7 @@ private data class MotionPreset(
 
 private const val PRESET_PREFS_NAME = "motion_presets"
 private const val PRESET_KEY = "preset_list"
+private const val MAX_PRESET_COUNT = 30
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -116,7 +117,6 @@ fun MotionScreen(
     val context = LocalContext.current
     val presets = remember { mutableStateListOf<MotionPreset>() }
     var showPresets by remember { mutableStateOf(true) }
-    var maxPresetCount by remember { mutableStateOf("10") }
     var nextPresetId by remember { mutableIntStateOf(1) }
     var pendingGroupPresetId by remember { mutableStateOf<Int?>(null) }
     var lastHandledCompleteGroupId by remember { mutableIntStateOf(0) }
@@ -126,10 +126,8 @@ fun MotionScreen(
     var showCycleDialog by remember { mutableStateOf(false) }
     var showConflictDialog by remember { mutableStateOf(false) }
     var conflictMessage by remember { mutableStateOf("") }
-    var showPresetLimitDialog by remember { mutableStateOf(false) }
     var cycleIndexText by remember { mutableStateOf("0") }
-
-    var groupIdText by remember { mutableStateOf(currentGroupId.toString()) }
+    var editingPresetId by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(Unit) {
         val loaded = loadPresets(context)
@@ -146,7 +144,6 @@ fun MotionScreen(
     }
 
     LaunchedEffect(currentGroupId) {
-        groupIdText = currentGroupId.toString()
         val pendingId = pendingGroupPresetId
         if (pendingId != null && currentGroupId > 0) {
             val index = presets.indexOfFirst { it.id == pendingId }
@@ -174,14 +171,6 @@ fun MotionScreen(
     }
 
     val servoNameMap = remember(servoInfo) { servoInfo.associate { it.id to it.name } }
-
-    LaunchedEffect(maxPresetCount) {
-        val maxCount = maxPresetCount.toIntOrNull() ?: return@LaunchedEffect
-        if (maxCount > 0 && presets.size > maxCount) {
-            val removeCount = presets.size - maxCount
-            repeat(removeCount) { presets.removeAt(0) }
-        }
-    }
 
     val activePresets = presets.filter { it.status != null }
     val occupancyMap = activePresets
@@ -302,87 +291,71 @@ fun MotionScreen(
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Motion 控制", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Group ID")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    TextField(
-                        value = groupIdText,
-                        onValueChange = { groupIdText = it },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { showPresetDialog = true }) { Text("添加预设 Motion") }
-                    OutlinedButton(onClick = { showCycleDialog = true }) { Text("创建 Cycle") }
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onStopMotion(groupIdText.toIntOrNull() ?: 0) }) { Text("停止") }
-                    OutlinedButton(onClick = { onPauseMotion(groupIdText.toIntOrNull() ?: 0) }) { Text("暂停") }
-                    OutlinedButton(onClick = { onResumeMotion(groupIdText.toIntOrNull() ?: 0) }) { Text("继续") }
-                    OutlinedButton(onClick = { onGetMotionStatus(groupIdText.toIntOrNull() ?: 0) }) { Text("状态") }
-                }
-            }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("预设动作列表", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                     Switch(checked = showPresets, onCheckedChange = { showPresets = it })
                 }
                 if (showPresets) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("最大长度")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        TextField(
-                            value = maxPresetCount,
-                            onValueChange = { maxPresetCount = it.filter { ch -> ch.isDigit() } },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.width(100.dp)
-                        )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            editingPresetId = null
+                            showPresetDialog = true
+                        }) { Text("添加预设 Motion") }
+                        OutlinedButton(onClick = { showCycleDialog = true }) { Text("创建 Cycle") }
                     }
                     if (presets.isEmpty()) {
                         Text("暂无预设动作，请点击“添加预设 Motion”。", color = Color.Gray)
                     } else {
-                        presets.forEach { preset ->
-                            MotionPresetCard(
-                                preset = preset,
-                                onStart = {
-                                    val conflicts = detectConflicts(preset, presets, servoNameMap)
-                                    if (conflicts.isNotEmpty()) {
-                                        conflictMessage = conflicts
-                                        showConflictDialog = true
-                                        return@MotionPresetCard
-                                    }
-                                    pendingGroupPresetId = preset.id
-                                    onStartMotion(preset.mode, preset.servoIds, preset.values, preset.durationMs)
-                                    updatePresetStatus(presets, preset.id, MotionPresetStatus.RUNNING)
-                                },
-                                onStop = {
-                                    if (preset.groupId > 0) {
-                                        onStopMotion(preset.groupId)
-                                    }
-                                    updatePresetStatus(presets, preset.id, null, clearGroup = true)
-                                },
-                                onPause = {
-                                    if (preset.groupId > 0) {
-                                        onPauseMotion(preset.groupId)
-                                        updatePresetStatus(presets, preset.id, MotionPresetStatus.PAUSED)
-                                    }
-                                },
-                                onResume = {
-                                    if (preset.groupId > 0) {
-                                        onResumeMotion(preset.groupId)
+                        Column(
+                            modifier = Modifier
+                                .heightIn(max = 360.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            presets.forEach { preset ->
+                                MotionPresetCard(
+                                    preset = preset,
+                                    onStart = {
+                                        val conflicts = detectConflicts(preset, presets, servoNameMap)
+                                        if (conflicts.isNotEmpty()) {
+                                            conflictMessage = conflicts
+                                            showConflictDialog = true
+                                            return@MotionPresetCard
+                                        }
+                                        pendingGroupPresetId = preset.id
+                                        onStartMotion(preset.mode, preset.servoIds, preset.values, preset.durationMs)
                                         updatePresetStatus(presets, preset.id, MotionPresetStatus.RUNNING)
+                                    },
+                                    onStop = {
+                                        if (preset.groupId > 0) {
+                                            onStopMotion(preset.groupId)
+                                        }
+                                        updatePresetStatus(presets, preset.id, null, clearGroup = true)
+                                    },
+                                    onPause = {
+                                        if (preset.groupId > 0) {
+                                            onPauseMotion(preset.groupId)
+                                            updatePresetStatus(presets, preset.id, MotionPresetStatus.PAUSED)
+                                        }
+                                    },
+                                    onResume = {
+                                        if (preset.groupId > 0) {
+                                            onResumeMotion(preset.groupId)
+                                            updatePresetStatus(presets, preset.id, MotionPresetStatus.RUNNING)
+                                        }
+                                    },
+                                    onEdit = {
+                                        editingPresetId = preset.id
+                                        showPresetDialog = true
+                                    },
+                                    onDelete = {
+                                        val index = presets.indexOfFirst { it.id == preset.id }
+                                        if (index >= 0) {
+                                            presets.removeAt(index)
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
@@ -415,22 +388,37 @@ fun MotionScreen(
     }
 
     if (showPresetDialog) {
+        val editingPreset = editingPresetId?.let { id -> presets.firstOrNull { it.id == id } }
         MotionPresetDialog(
             servoInfo = servoInfo,
             onDismiss = { showPresetDialog = false },
+            preset = editingPreset,
             onConfirm = { preset ->
                 if (preset.servoIds.isEmpty()) {
                     conflictMessage = "请至少选择一个舵机。"
                     showConflictDialog = true
                     return@MotionPresetDialog
                 }
-                val maxCount = maxPresetCount.toIntOrNull() ?: 10
-                if (presets.size >= maxCount) {
-                    showPresetLimitDialog = true
-                    return@MotionPresetDialog
+                if (editingPreset != null) {
+                    val index = presets.indexOfFirst { it.id == editingPreset.id }
+                    if (index >= 0) {
+                        presets[index] = editingPreset.copy(
+                            name = preset.name,
+                            mode = preset.mode,
+                            durationMs = preset.durationMs,
+                            servoIds = preset.servoIds,
+                            values = preset.values,
+                            realtime = preset.realtime
+                        )
+                    }
+                } else {
+                    presets.add(preset.copy(id = nextPresetId++))
+                    if (presets.size > MAX_PRESET_COUNT) {
+                        repeat(presets.size - MAX_PRESET_COUNT) { presets.removeAt(0) }
+                    }
                 }
-                presets.add(preset.copy(id = nextPresetId++))
                 showPresetDialog = false
+                editingPresetId = null
             },
             onPreviewServoValue = onPreviewServoValue
         )
@@ -468,16 +456,6 @@ fun MotionScreen(
         )
     }
 
-    if (showPresetLimitDialog) {
-        AlertDialog(
-            onDismissRequest = { showPresetLimitDialog = false },
-            title = { Text("超过最大长度") },
-            text = { Text("预设动作数量已达到上限，请调整最大长度或删除部分预设。") },
-            confirmButton = {
-                TextButton(onClick = { showPresetLimitDialog = false }) { Text("好的") }
-            }
-        )
-    }
 }
 
 private fun updatePresetStatus(
@@ -626,7 +604,9 @@ private fun MotionPresetCard(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onPause: () -> Unit,
-    onResume: () -> Unit
+    onResume: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
     val statusText = when (preset.status) {
         MotionPresetStatus.RUNNING -> "运行中"
@@ -667,6 +647,8 @@ private fun MotionPresetCard(
                 OutlinedButton(onClick = onStop) { Text("停止") }
                 OutlinedButton(onClick = onPause, enabled = preset.groupId > 0) { Text("暂停") }
                 OutlinedButton(onClick = onResume, enabled = preset.groupId > 0) { Text("继续") }
+                OutlinedButton(onClick = onEdit) { Text("编辑") }
+                OutlinedButton(onClick = onDelete) { Text("删除") }
             }
         }
     }
@@ -677,21 +659,31 @@ private fun MotionPresetCard(
 private fun MotionPresetDialog(
     servoInfo: List<MotionServoInfo>,
     onDismiss: () -> Unit,
+    preset: MotionPreset?,
     onConfirm: (MotionPreset) -> Unit,
     onPreviewServoValue: (servoId: Int, mode: Int, value: Float) -> Unit
 ) {
-    var name by remember { mutableStateOf("预设动作") }
-    var mode by remember { mutableIntStateOf(MotionProtocolCodec.MODE_PWM) }
-    var durationMs by remember { mutableStateOf("500") }
-    var realtime by remember { mutableStateOf(false) }
-    val selectedIds = remember { mutableStateListOf<Int>() }
-    val valueMap = remember { mutableStateMapOf<Int, Float>() }
+    var name by remember(preset) { mutableStateOf(preset?.name ?: "预设动作") }
+    var mode by remember(preset) { mutableIntStateOf(preset?.mode ?: MotionProtocolCodec.MODE_PWM) }
+    var durationMs by remember(preset) { mutableStateOf(preset?.durationMs?.toString() ?: "500") }
+    var realtime by remember(preset) { mutableStateOf(preset?.realtime ?: false) }
+    val selectedIds = remember(preset) { mutableStateListOf<Int>().apply { preset?.servoIds?.let { addAll(it) } } }
+    val valueMap = remember(preset) {
+        mutableStateMapOf<Int, Float>().apply {
+            preset?.servoIds?.forEachIndexed { index, id ->
+                this[id] = preset.values.getOrNull(index) ?: 0f
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加预设 Motion") },
+        title = { Text(if (preset == null) "添加预设 Motion" else "编辑预设 Motion") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
                 TextField(
                     value = name,
                     onValueChange = { name = it },
@@ -727,33 +719,35 @@ private fun MotionPresetDialog(
                 }
 
                 Text("选择舵机")
-                servoInfo.forEach { servo ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Checkbox(
-                            checked = selectedIds.contains(servo.id),
-                            onCheckedChange = { checked ->
-                                if (checked) {
+                FlowRow(
+                    maxItemsInEachRow = 2,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    servoInfo.take(4).forEach { servo ->
+                        val selected = selectedIds.contains(servo.id)
+                        OutlinedButton(
+                            onClick = {
+                                if (selected) {
+                                    selectedIds.remove(servo.id)
+                                    valueMap.remove(servo.id)
+                                } else {
                                     selectedIds.add(servo.id)
                                     if (!valueMap.containsKey(servo.id)) {
                                         valueMap[servo.id] = if (mode == MotionProtocolCodec.MODE_PWM) 1500f else 135f
                                     }
-                                } else {
-                                    selectedIds.remove(servo.id)
-                                    valueMap.remove(servo.id)
                                 }
                             }
-                        )
-                        Text("${servo.name} (#${servo.id})")
+                        ) {
+                            Text(if (selected) "✓ ${servo.name}" else servo.name)
+                        }
                     }
                 }
 
                 selectedIds.sorted().forEach { servoId ->
                     val currentValue = valueMap[servoId] ?: if (mode == MotionProtocolCodec.MODE_PWM) 1500f else 135f
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("舵机 $servoId 值")
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("舵机 $servoId 值：${currentValue.toInt()}")
                         Slider(
                             value = currentValue,
                             onValueChange = {
@@ -781,8 +775,10 @@ private fun MotionPresetDialog(
                                 }
                             },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.width(120.dp)
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                     }
                 }
             }
@@ -803,7 +799,7 @@ private fun MotionPresetDialog(
                     )
                 )
             }) {
-                Text("添加")
+                Text(if (preset == null) "添加" else "保存")
             }
         },
         dismissButton = {
