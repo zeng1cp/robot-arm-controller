@@ -42,6 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Dp
@@ -588,12 +590,31 @@ private fun Modifier.drawProgressBorder(
     val blendedBorder = androidx.compose.ui.graphics.lerp(borderColor, progressColor, progress)
 
     translate(inset, inset) {
+        val rect = androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height)
+        val outlinePath = Path().apply {
+            addRoundRect(androidx.compose.ui.geometry.RoundRect(rect, cornerRadius))
+        }
         drawRoundRect(
             color = blendedBorder,
             size = size,
             cornerRadius = cornerRadius,
             style = Stroke(width = strokePx)
         )
+        if (progress > 0f) {
+            val measure = PathMeasure()
+            measure.setPath(outlinePath, false)
+            val segment = Path()
+            val total = measure.length
+            val target = (total * progress.coerceIn(0f, 1f)).coerceAtLeast(0f)
+            if (target > 0f) {
+                measure.getSegment(0f, target, segment, true)
+                drawPath(
+                    path = segment,
+                    color = progressColor,
+                    style = Stroke(width = strokePx)
+                )
+            }
+        }
     }
 }
 
