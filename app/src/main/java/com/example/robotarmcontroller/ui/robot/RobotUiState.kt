@@ -12,7 +12,9 @@ data class RobotUiState(
     val lastCommandSent: ServoCommand? = null,
     val commandHistory: List<ServoCommand> = emptyList(),
     val connectionStatus: String = "未连接",
-    val controlMode: ControlMode = ControlMode.PWM // 新增：控制模式
+    val controlMode: ControlMode = ControlMode.PWM, // 新增：控制模式
+    val motionGroupId: Int = 0,
+    val motionCompleteGroupId: Int = 0
 )
 
 data class ServoState(
