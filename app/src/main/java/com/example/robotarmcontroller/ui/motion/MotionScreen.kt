@@ -551,7 +551,7 @@ private fun ServoStatusCard(
     strokeWidth: Dp = 3.dp
 ) {
     val borderColor = MaterialTheme.colorScheme.outlineVariant
-    val progressColor = if (isMoving) Color(0xFF2E7D32) else borderColor
+    val progressColor = if (progress > 0f) Color(0xFF2E7D32) else borderColor
     val shape = RoundedCornerShape(cornerRadius)
     Column(
         modifier = modifier
