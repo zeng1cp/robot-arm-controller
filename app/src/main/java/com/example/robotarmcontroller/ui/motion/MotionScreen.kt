@@ -42,7 +42,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Dp
@@ -586,24 +585,15 @@ private fun Modifier.drawProgressBorder(
     val size = size.copy(width = size.width - strokePx, height = size.height - strokePx)
     val corner = shape.topStart.toPx(size, this)
     val cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner, corner)
+    val blendedBorder = androidx.compose.ui.graphics.lerp(borderColor, progressColor, progress)
 
     translate(inset, inset) {
         drawRoundRect(
-            color = borderColor,
+            color = blendedBorder,
             size = size,
             cornerRadius = cornerRadius,
             style = Stroke(width = strokePx)
         )
-        if (progress > 0f) {
-            drawArc(
-                color = progressColor,
-                startAngle = -90f,
-                sweepAngle = 360f * progress,
-                useCenter = false,
-                size = size,
-                style = Stroke(width = strokePx, cap = StrokeCap.Round)
-            )
-        }
     }
 }
 
