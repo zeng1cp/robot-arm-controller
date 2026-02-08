@@ -588,15 +588,13 @@ private fun Modifier.drawProgressBorder(
     val size = size.copy(width = size.width - strokePx, height = size.height - strokePx)
     val corner = shape.topStart.toPx(size, this)
     val cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner, corner)
-    val blendedBorder = androidx.compose.ui.graphics.lerp(borderColor, progressColor, progress)
-
     translate(inset, inset) {
         val rect = androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height)
         val outlinePath = Path().apply {
             addRoundRect(androidx.compose.ui.geometry.RoundRect(rect, cornerRadius))
         }
         drawRoundRect(
-            color = blendedBorder,
+            color = borderColor,
             size = size,
             cornerRadius = cornerRadius,
             style = Stroke(width = strokePx)
