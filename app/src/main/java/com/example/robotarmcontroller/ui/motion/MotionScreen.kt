@@ -584,7 +584,7 @@ private fun Modifier.drawProgressBorder(
     val strokePx = strokeWidth.toPx()
     val inset = strokePx / 2f
     val size = size.copy(width = size.width - strokePx, height = size.height - strokePx)
-    val corner = shape.topStart.toPx(size, layoutDirection)
+    val corner = shape.topStart.toPx(size, this)
     val cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner, corner)
 
     translate(inset, inset) {
