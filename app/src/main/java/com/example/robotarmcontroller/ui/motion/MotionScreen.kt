@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -605,13 +606,15 @@ private fun Modifier.drawProgressBorder(
             measure.setPath(outlinePath, false)
             val segment = Path()
             val total = measure.length
-            val target = (total * progress.coerceIn(0f, 1f)).coerceAtLeast(0f)
+            val normalized = progress.coerceIn(0f, 1f)
+            val minSegment = strokePx * 4f
+            val target = (total * normalized).coerceAtLeast(minSegment)
             if (target > 0f) {
                 measure.getSegment(0f, target, segment, true)
                 drawPath(
                     path = segment,
                     color = progressColor,
-                    style = Stroke(width = strokePx)
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
                 )
             }
         }
