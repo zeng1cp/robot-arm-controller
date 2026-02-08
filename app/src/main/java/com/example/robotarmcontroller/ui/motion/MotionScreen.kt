@@ -720,11 +720,11 @@ private fun MotionPresetDialog(
 
                 Text("选择舵机")
                 FlowRow(
-                    maxItemsInEachRow = 2,
+                    maxItemsInEachRow = 3,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    servoInfo.take(4).forEach { servo ->
+                    servoInfo.take(6).forEach { servo ->
                         val selected = selectedIds.contains(servo.id)
                         OutlinedButton(
                             onClick = {
