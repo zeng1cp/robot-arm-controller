@@ -393,19 +393,6 @@ class RobotViewModel : ViewModel() {
             Log.w(TAG, "启动Motion失败: ids/values为空或长度不一致 ids=${ids.size} values=${values.size}")
             return
         }
-        val currentList = _uiState.value.servoList
-        val allSame = ids.zip(values).all { (id, value) ->
-            val servo = currentList.getOrNull(id) ?: return@all false
-            if (mode == MotionProtocolCodec.MODE_PWM) {
-                kotlin.math.abs(servo.pwm - value) < 0.5f
-            } else {
-                kotlin.math.abs(servo.angle - value) < 0.5f
-            }
-        }
-        if (allSame) {
-            Log.w(TAG, "启动Motion失败: 目标值与当前舵机状态一致")
-            return
-        }
         viewModelScope.launch {
             val data = MotionProtocolCodec.encodeStart(mode, ids, values, durationMs)
             val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
