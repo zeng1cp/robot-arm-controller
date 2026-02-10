@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -40,6 +41,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,10 +55,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.example.robotarmcontroller.protocol.MotionProtocolCodec
+import com.example.robotarmcontroller.ui.robot.CycleInfo
+import com.example.robotarmcontroller.ui.robot.CyclePanel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.snapshotFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -114,7 +117,9 @@ fun MotionScreen(
     onRestartCycle: (index: Int) -> Unit,
     onPauseCycle: (index: Int) -> Unit,
     onReleaseCycle: (index: Int) -> Unit,
-    onGetCycleStatus: (index: Int) -> Unit
+    onGetCycleStatus: (index: Int) -> Unit,
+    onRequestCycleList: () -> Unit = {},
+    cycleList: List<CycleInfo> = emptyList()
 ) {
     val context = LocalContext.current
     val presets = remember { mutableStateListOf<MotionPreset>() }
@@ -402,8 +407,25 @@ fun MotionScreen(
                     OutlinedButton(onClick = { onPauseCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("暂停") }
                     OutlinedButton(onClick = { onReleaseCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("释放") }
                     OutlinedButton(onClick = { onGetCycleStatus(cycleIndexText.toIntOrNull() ?: 0) }) { Text("状态") }
+                    OutlinedButton(onClick = { onRequestCycleList() }) { Text("刷新列表") }
                 }
             }
+        }
+
+        // show list of existing cycles if available
+        if (cycleList.isNotEmpty()) {
+            CyclePanel(
+                cycleList = cycleList,
+                onStart = onStartCycle,
+                onPause = onPauseCycle,
+                onRestart = onRestartCycle,
+                onRelease = onReleaseCycle,
+                onRequestStatus = onGetCycleStatus,
+                onRequestList = onRequestCycleList,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            )
         }
     }
 

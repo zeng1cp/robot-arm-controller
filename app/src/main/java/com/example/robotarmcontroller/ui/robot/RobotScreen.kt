@@ -9,12 +9,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BluetoothDisabled
-import androidx.compose.material.icons.filled.ClearAll
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowLeft
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowRight
+import androidx.compose.material.icons.filled.BluetoothDisabled
+import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -52,6 +52,14 @@ fun RobotScreen(
     onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
     onSyncAllServoStatusClick: () -> Unit,
+    // -- cycle related (optional, with defaults so existing callers keep compiling)
+    cycleList: List<CycleInfo> = emptyList(),
+    onCycleStart: (Int) -> Unit = {},
+    onCyclePause: (Int) -> Unit = {},
+    onCycleRestart: (Int) -> Unit = {},
+    onCycleRelease: (Int) -> Unit = {},
+    onRequestCycleStatusClick: (Int) -> Unit = {},
+    onRequestCycleListClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -62,6 +70,7 @@ fun RobotScreen(
             onServoEnableClick = onServoEnableClick,
             onServoDisableClick = onServoDisableClick,
             onSyncAllServoStatusClick = onSyncAllServoStatusClick,
+            onSyncCycles = onRequestCycleListClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -116,6 +125,14 @@ fun RobotScreen(
     onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
     onRequestServoStatusClick: (Int) -> Unit,
+    // -- cycle related (optional)
+    cycleList: List<CycleInfo> = emptyList(),
+    onCycleStart: (Int) -> Unit = {},
+    onCyclePause: (Int) -> Unit = {},
+    onCycleRestart: (Int) -> Unit = {},
+    onCycleRelease: (Int) -> Unit = {},
+    onRequestCycleStatusClick: (Int) -> Unit = {},
+    onRequestCycleListClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     RobotScreen(
@@ -131,6 +148,14 @@ fun RobotScreen(
         onSyncAllServoStatusClick = {
             state.servoList.forEach { onRequestServoStatusClick(it.id) }
         },
+        // forward cycle params
+        cycleList = cycleList,
+        onCycleStart = onCycleStart,
+        onCyclePause = onCyclePause,
+        onCycleRestart = onCycleRestart,
+        onCycleRelease = onCycleRelease,
+        onRequestCycleStatusClick = onRequestCycleStatusClick,
+        onRequestCycleListClick = onRequestCycleListClick,
         modifier = modifier
     )
 }
@@ -144,6 +169,7 @@ private fun RobotActionBar(
     onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
     onSyncAllServoStatusClick: () -> Unit,
+    onSyncCycles: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -165,6 +191,7 @@ private fun RobotActionBar(
             Button(onClick = onServoEnableClick, enabled = isConnected) { Text("使能") }
             Button(onClick = onServoDisableClick, enabled = isConnected) { Text("失能") }
             OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步") }
+            OutlinedButton(onClick = onSyncCycles, enabled = isConnected) { Text("同步Cycle") }
         }
     }
 }
@@ -257,7 +284,7 @@ fun ServoControlCard(
                 IconButton(onClick = {
                     if (controlMode == ControlMode.PWM) { onPwmChange(servo.pwm - smallStep); onPwmChangeFinished() }
                     else { onAngleChange(servo.angle - smallStep); onAngleChangeFinished() }
-                }) { Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "减少$smallStep") }
+                }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "减少$smallStep") }
 
                 val currentValue = if (controlMode == ControlMode.PWM) servo.pwm else servo.angle
                 var text by remember { mutableStateOf(currentValue.toInt().toString()) }
@@ -285,7 +312,7 @@ fun ServoControlCard(
                 IconButton(onClick = {
                     if (controlMode == ControlMode.PWM) { onPwmChange(servo.pwm + smallStep); onPwmChangeFinished() }
                     else { onAngleChange(servo.angle + smallStep); onAngleChangeFinished() }
-                }) { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "增加$smallStep") }
+                }) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "增加$smallStep") }
 
                 IconButton(onClick = {
                     if (controlMode == ControlMode.PWM) { onPwmChange(servo.pwm + bigStep); onPwmChangeFinished() }
@@ -358,6 +385,95 @@ fun CommandHistoryPanel(
                     }
                     Text(text = modeText, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(vertical = 2.dp))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun CyclePanel(
+    cycleList: List<CycleInfo>,
+    onStart: (Int) -> Unit,
+    onPause: (Int) -> Unit,
+    onRestart: (Int) -> Unit,
+    onRelease: (Int) -> Unit,
+    onRequestStatus: (Int) -> Unit,
+    onRequestList: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = "Cycle 列表 (${cycleList.size})", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                TextButton(onClick = onRequestList) { Text("刷新", fontSize = 12.sp) }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Column {
+                cycleList.forEach { c ->
+                    CycleCard(
+                        cycle = c,
+                        onStart = onStart,
+                        onPause = onPause,
+                        onRestart = onRestart,
+                        onRelease = onRelease,
+                        onRequestStatus = onRequestStatus
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CycleCard(
+    cycle: CycleInfo,
+    onStart: (Int) -> Unit,
+    onPause: (Int) -> Unit,
+    onRestart: (Int) -> Unit,
+    onRelease: (Int) -> Unit,
+    onRequestStatus: (Int) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                val status = when {
+                    cycle.running -> "运行中"
+                    cycle.active -> "已激活"
+                    else -> "空闲"
+                }
+                Text(text = "Cycle ${cycle.index}: $status", fontWeight = FontWeight.Medium)
+                Text(text = "Pose ${cycle.currentPose + 1}/${cycle.poseCount}")
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { onStart(cycle.index) }, enabled = !cycle.running) { Text("Start") }
+                Button(onClick = { onPause(cycle.index) }, enabled = cycle.running) { Text("Pause") }
+                OutlinedButton(onClick = { onRestart(cycle.index) }) { Text("Restart") }
+                OutlinedButton(onClick = { onRelease(cycle.index) }) { Text("Release") }
+                TextButton(onClick = { onRequestStatus(cycle.index) }) { Text("Status") }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(text = "Loops: ${cycle.loopCount}/${cycle.maxLoops}", fontSize = 12.sp, color = Color.Gray)
+                Text(text = "Group: ${cycle.activeGroupId}", fontSize = 12.sp, color = Color.Gray)
             }
         }
     }

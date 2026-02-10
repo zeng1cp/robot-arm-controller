@@ -61,6 +61,7 @@ object ProtocolCommand {
         const val CYCLE_RELEASE: UByte = 0x14u
         const val CYCLE_GET_STATUS: UByte = 0x15u
         const val CYCLE_STATUS: UByte = 0x16u
+        const val CYCLE_LIST: UByte = 0x17u
     }
 }
 

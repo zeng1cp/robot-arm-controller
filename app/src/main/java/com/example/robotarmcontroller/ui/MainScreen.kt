@@ -21,7 +21,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -66,6 +66,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
 
     val bleState by bleViewModel.uiState.collectAsState()
     val robotState by robotViewModel.uiState.collectAsState()
+    val cycleList by robotViewModel.cycleList.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -177,7 +178,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            TabRow(selectedTabIndex = selectedTabIndex) {
+            PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
                 MainTab.entries.forEachIndexed { index, tab ->
                     Tab(
                         selected = selectedTabIndex == index,
@@ -201,6 +202,14 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     onServoEnableClick = robotViewModel::setServoEnable,
                     onServoDisableClick = robotViewModel::setServoDisable,
                     onSyncAllServoStatusClick = robotViewModel::requestAllServoStatus,
+                    // pass cycle state and callbacks
+                    cycleList = cycleList,
+                    onCycleStart = robotViewModel::startCycle,
+                    onCyclePause = robotViewModel::pauseCycle,
+                    onCycleRestart = robotViewModel::restartCycle,
+                    onCycleRelease = robotViewModel::releaseCycle,
+                    onRequestCycleStatusClick = robotViewModel::requestCycleStatus,
+                    onRequestCycleListClick = robotViewModel::requestCycleList,
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f)
@@ -228,6 +237,8 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     onPauseCycle = robotViewModel::pauseMotionCycle,
                     onReleaseCycle = robotViewModel::releaseMotionCycle,
                     onGetCycleStatus = robotViewModel::requestMotionCycleStatus,
+                    onRequestCycleList = robotViewModel::requestCycleList,
+                    cycleList = cycleList,
                     modifier = Modifier.fillMaxSize().weight(1f)
                 )
                 MainTab.ARM -> PlaceholderPage(title = "Arm 控制（待实现）")

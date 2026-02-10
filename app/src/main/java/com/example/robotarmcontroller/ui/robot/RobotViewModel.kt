@@ -19,10 +19,26 @@ import kotlinx.coroutines.launch
 private const val TAG = "RobotViewModel"
 private const val MAX_COMMAND_HISTORY_SIZE = 100
 
+// New shared model for cycles
+data class CycleInfo(
+    val index: Int,
+    val active: Boolean,
+    val running: Boolean,
+    val currentPose: Int,
+    val poseCount: Int,
+    val loopCount: Int,
+    val maxLoops: Int,
+    val activeGroupId: Int
+)
+
 class RobotViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(RobotUiState())
     val uiState: StateFlow<RobotUiState> = _uiState.asStateFlow()
+
+    // expose cycle list as separate StateFlow for UI
+    private val _cycleList = MutableStateFlow<List<CycleInfo>>(emptyList())
+    val cycleList: StateFlow<List<CycleInfo>> = _cycleList.asStateFlow()
 
     // BLE 服务接口
     private var bleService: BleService? = null
@@ -186,6 +202,17 @@ class RobotViewModel : ViewModel() {
                         }
                         val subcmd = payload[0].toInt() and 0xFF
                         when (subcmd) {
+                            ProtocolCommand.Motion.CYCLE_LIST.toInt() -> {
+                                // payload includes subcmd at [0], pass through to parser
+                                Log.i(TAG, "收到CYCLE_LIST 帧, len=${payload.size}")
+                                try {
+                                    val hex = payload.joinToString(" ") { String.format("%02X", it.toInt() and 0xFF) }
+                                    Log.d(TAG, "CYCLE_LIST payload hex: $hex")
+                                } catch (e: Exception) {
+                                    Log.d(TAG, "无法打印payload: ${e.message}")
+                                }
+                                parseAndSetCycleList(payload)
+                            }
                             ProtocolCommand.Motion.START.toInt(),
                             ProtocolCommand.Motion.GET_STATUS.toInt() -> {
                                 if (payload.size >= 5) {
@@ -503,6 +530,20 @@ class RobotViewModel : ViewModel() {
         }
     }
 
+    // Convenience wrappers for UI (forward to motion-specific functions)
+    fun startCycle(index: Int) { startMotionCycle(index) }
+    fun pauseCycle(index: Int) { pauseMotionCycle(index) }
+    fun restartCycle(index: Int) { restartMotionCycle(index) }
+    fun releaseCycle(index: Int) { releaseMotionCycle(index) }
+    fun requestCycleStatus(index: Int) { requestMotionCycleStatus(index) }
+    fun requestCycleList() {
+        viewModelScope.launch {
+            val data = byteArrayOf(ProtocolCommand.Motion.CYCLE_LIST.toByte())
+            val success = bleService?.sendFrame(ProtocolFrameType.MOTION, data) == true
+            Log.d(TAG, "请求CycleList: success=$success")
+        }
+    }
+
     fun previewServoValue(servoId: Int, mode: Int, value: Float) {
         if (servoId !in _uiState.value.servoList.indices) {
             Log.w(TAG, "预览舵机失败: 无效舵机ID $servoId")
@@ -549,6 +590,132 @@ class RobotViewModel : ViewModel() {
     fun clearHistory() {
         _uiState.update { it.copy(commandHistory = emptyList()) }
     }
+
+    private fun parseAndSetCycleList(payloadWithSubcmd: ByteArray) {
+        // payloadWithSubcmd[0] is subcmd
+        if (payloadWithSubcmd.size < 2) return
+        val subcmd = payloadWithSubcmd[0].toInt() and 0xFF
+        val payload = payloadWithSubcmd.copyOfRange(1, payloadWithSubcmd.size)
+
+        // payload now starts with count (u8) followed by entries
+        if (payload.size < 1) return
+        val count = payload[0].toInt() and 0xFF
+
+        // Two possible entry formats observed in firmware:
+        // - compact: entry_len = 17 bytes: [index:u8][active:u8][running:u8][current_pose:u8][pose_count:u8][loop_count:u32][max_loops:u32][group_id:u32]
+        // - expanded: entry_len = 21 bytes (some firmwares may use u32 index): [index:u32][active:u8][running:u8][current_pose:u8][pose_count:u8][loop_count:u32][max_loops:u32][group_id:u32]
+
+        val compactEntryLen = 17
+        val expandedEntryLen = 21
+
+        if (payload.size == 1 + count * compactEntryLen) {
+            val list = mutableListOf<CycleInfo>()
+            var off = 1
+            repeat(count) {
+                if (off + compactEntryLen <= payload.size) {
+                    val index = payload[off].toInt() and 0xFF
+                    val active = payload[off + 1].toInt() and 0xFF
+                    val running = payload[off + 2].toInt() and 0xFF
+                    val currentPose = payload[off + 3].toInt() and 0xFF
+                    val poseCount = payload[off + 4].toInt() and 0xFF
+                    val loopCount = toIntLe(payload, off + 5)
+                    val maxLoops = toIntLe(payload, off + 9)
+                    val activeGroupId = toIntLe(payload, off + 13)
+                    list.add(
+                        CycleInfo(
+                            index = index,
+                            active = active != 0,
+                            running = running != 0,
+                            currentPose = currentPose,
+                            poseCount = poseCount,
+                            loopCount = loopCount,
+                            maxLoops = maxLoops,
+                            activeGroupId = activeGroupId
+                        )
+                    )
+                }
+                off += compactEntryLen
+            }
+            // sort by index for stable UI presentation
+            val sorted = list.sortedBy { it.index }
+            Log.i(TAG, "解析到 CYCLE_LIST entries: ${sorted.size}")
+            sorted.forEach { ci -> Log.d(TAG, "Cycle parsed: idx=${ci.index} active=${ci.active} running=${ci.running} pose=${ci.currentPose}/${ci.poseCount} loops=${ci.loopCount}/${ci.maxLoops} group=${ci.activeGroupId}") }
+            _cycleList.value = sorted
+            return
+        }
+
+        if (payload.size == 1 + count * expandedEntryLen) {
+            val list = mutableListOf<CycleInfo>()
+            var off = 1
+            repeat(count) {
+                if (off + expandedEntryLen <= payload.size) {
+                    val index = toIntLe(payload, off)
+                    val active = payload[off + 4].toInt() and 0xFF
+                    val running = payload[off + 5].toInt() and 0xFF
+                    val currentPose = payload[off + 6].toInt() and 0xFF
+                    val poseCount = payload[off + 7].toInt() and 0xFF
+                    val loopCount = toIntLe(payload, off + 8)
+                    val maxLoops = toIntLe(payload, off + 12)
+                    val activeGroupId = toIntLe(payload, off + 16)
+                    list.add(
+                        CycleInfo(
+                            index = index,
+                            active = active != 0,
+                            running = running != 0,
+                            currentPose = currentPose,
+                            poseCount = poseCount,
+                            loopCount = loopCount,
+                            maxLoops = maxLoops,
+                            activeGroupId = activeGroupId
+                        )
+                    )
+                }
+                off += expandedEntryLen
+            }
+            val sorted = list.sortedBy { it.index }
+            Log.i(TAG, "解析到 CYCLE_LIST entries (expanded): ${sorted.size}")
+            sorted.forEach { ci -> Log.d(TAG, "Cycle parsed: idx=${ci.index} active=${ci.active} running=${ci.running} pose=${ci.currentPose}/${ci.poseCount} loops=${ci.loopCount}/${ci.maxLoops} group=${ci.activeGroupId}") }
+            _cycleList.value = sorted
+            return
+        }
+
+        // fallback heuristic: if payload (without count) length is multiple of 17, parse as compact entries
+        if (payload.size >= compactEntryLen && (payload.size - 1) % compactEntryLen == 0) {
+            val list = mutableListOf<CycleInfo>()
+            var off = 1
+            while (off + compactEntryLen <= payload.size) {
+                val index = payload[off].toInt() and 0xFF
+                val active = payload[off + 1].toInt() and 0xFF
+                val running = payload[off + 2].toInt() and 0xFF
+                val currentPose = payload[off + 3].toInt() and 0xFF
+                val poseCount = payload[off + 4].toInt() and 0xFF
+                val loopCount = toIntLe(payload, off + 5)
+                val maxLoops = toIntLe(payload, off + 9)
+                val activeGroupId = toIntLe(payload, off + 13)
+                list.add(
+                    CycleInfo(
+                        index = index,
+                        active = active != 0,
+                        running = running != 0,
+                        currentPose = currentPose,
+                        poseCount = poseCount,
+                        loopCount = loopCount,
+                        maxLoops = maxLoops,
+                        activeGroupId = activeGroupId
+                    )
+                )
+                off += compactEntryLen
+            }
+            val sorted = list.sortedBy { it.index }
+            Log.i(TAG, "解析到 CYCLE_LIST entries (heuristic): ${sorted.size}")
+            sorted.forEach { ci -> Log.d(TAG, "Cycle parsed: idx=${ci.index} active=${ci.active} running=${ci.running} pose=${ci.currentPose}/${ci.poseCount} loops=${ci.loopCount}/${ci.maxLoops} group=${ci.activeGroupId}") }
+            _cycleList.value = sorted
+            return
+        }
+
+        Log.w(TAG, "无法解析CycleList: payload len=${payload.size} subcmd=0x${subcmd.toString(16)}")
+    }
+
 }
 
 // BLE 服务接口
