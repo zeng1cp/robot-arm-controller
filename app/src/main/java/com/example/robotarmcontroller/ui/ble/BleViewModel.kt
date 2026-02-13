@@ -62,7 +62,7 @@ class BleViewModel(
             _uiState.update { it.copy(connectionState = BleConnectionState.Scanning) }
             scanJob = viewModelScope.launch {
                 try {
-                    bleManager.scan()
+                    bleManager.startScan()
                 } catch (e: Exception) {
                     Log.e(TAG, "扫描失败: ${e.message}")
                     _uiState.update {

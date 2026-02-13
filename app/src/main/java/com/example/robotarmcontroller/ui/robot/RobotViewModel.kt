@@ -394,6 +394,13 @@ class RobotViewModel : ViewModel() {
         }
     }
 
+    fun setAllServoHome() {
+        viewModelScope.launch {
+            val success = bleService?.setAllServoHome() == true
+            Log.d(TAG, "舵机归位命令发送: $success")
+        }
+    }
+
     fun requestAllServoStatus() {
         val ids = _uiState.value.servoList.map { it.id }
         viewModelScope.launch {
@@ -722,6 +729,7 @@ class RobotViewModel : ViewModel() {
 interface BleService {
     suspend fun sendServoCommand(servoId: Int, pwmValue: Int): Boolean
     suspend fun setServoEnable(enable: Boolean): Boolean
+    suspend fun setAllServoHome(): Boolean
     suspend fun requestServoStatus(servoId: Int): Boolean
     suspend fun sendTestMessage(message: String): Boolean
     suspend fun sendFrame(frameType: UInt, data: ByteArray): Boolean

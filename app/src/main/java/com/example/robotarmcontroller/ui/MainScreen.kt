@@ -92,6 +92,11 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
                     }
 
+                    override suspend fun setAllServoHome(): Boolean {
+                        val data = byteArrayOf(ProtocolCommand.Servo.HOME.toByte())
+                        return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
+                    }
+
                     override suspend fun requestServoStatus(servoId: Int): Boolean {
                         val data = ServoProtocolCodec.encodeGetStatus(servoId)
                         return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
@@ -111,7 +116,10 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 robotViewModel.setBleService(bleService)
 
                 scope.launch {
-                    snackbarHostState.showSnackbar("蓝牙连接成功", duration = SnackbarDuration.Short)
+                    snackbarHostState.showSnackbar(
+                        "蓝牙连接成功",
+                        duration = SnackbarDuration.Short
+                    )
                 }
             }
 
@@ -119,7 +127,10 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 robotViewModel.disconnect()
                 val errorMsg = (bleState.connectionState as BleConnectionState.Error).message
                 scope.launch {
-                    snackbarHostState.showSnackbar("连接错误: $errorMsg", duration = SnackbarDuration.Long)
+                    snackbarHostState.showSnackbar(
+                        "连接错误: $errorMsg",
+                        duration = SnackbarDuration.Long
+                    )
                 }
             }
 
@@ -201,6 +212,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     onClearHistoryClick = robotViewModel::clearHistory,
                     onServoEnableClick = robotViewModel::setServoEnable,
                     onServoDisableClick = robotViewModel::setServoDisable,
+                    onAllServoHomeClick = robotViewModel::setAllServoHome,
                     onSyncAllServoStatusClick = robotViewModel::requestAllServoStatus,
                     // pass cycle state and callbacks
                     cycleList = cycleList,
@@ -239,8 +251,11 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     onGetCycleStatus = robotViewModel::requestMotionCycleStatus,
                     onRequestCycleList = robotViewModel::requestCycleList,
                     cycleList = cycleList,
-                    modifier = Modifier.fillMaxSize().weight(1f)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f)
                 )
+
                 MainTab.ARM -> PlaceholderPage(title = "Arm 控制（待实现）")
             }
         }
@@ -250,9 +265,24 @@ fun MainScreen(modifier: Modifier = Modifier) {
 @Composable
 private fun BleConnectionBadge(state: BleConnectionState) {
     val (icon, text, tint) = when (state) {
-        BleConnectionState.Connected -> Triple(Icons.Default.BluetoothConnected, "已连接", Color(0xFF2E7D32))
-        BleConnectionState.Connecting -> Triple(Icons.AutoMirrored.Filled.BluetoothSearching, "连接中", Color(0xFF1565C0))
-        BleConnectionState.Scanning -> Triple(Icons.AutoMirrored.Filled.BluetoothSearching, "扫描中", Color(0xFF1565C0))
+        BleConnectionState.Connected -> Triple(
+            Icons.Default.BluetoothConnected,
+            "已连接",
+            Color(0xFF2E7D32)
+        )
+
+        BleConnectionState.Connecting -> Triple(
+            Icons.AutoMirrored.Filled.BluetoothSearching,
+            "连接中",
+            Color(0xFF1565C0)
+        )
+
+        BleConnectionState.Scanning -> Triple(
+            Icons.AutoMirrored.Filled.BluetoothSearching,
+            "扫描中",
+            Color(0xFF1565C0)
+        )
+
         is BleConnectionState.Error -> Triple(Icons.Default.Warning, "错误", Color(0xFFC62828))
         else -> Triple(Icons.Default.Bluetooth, "未连接", Color.Gray)
     }
@@ -265,7 +295,11 @@ private fun BleConnectionBadge(state: BleConnectionState) {
 
 @Composable
 private fun PlaceholderPage(title: String) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Text("后续将按同一协议框架接入命令、状态同步与控制面板。")

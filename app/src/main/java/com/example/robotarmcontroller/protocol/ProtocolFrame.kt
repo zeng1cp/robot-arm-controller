@@ -36,6 +36,7 @@ object ProtocolCommand {
         const val SET_POS: UByte = 0x04u
         const val GET_STATUS: UByte = 0x05u
         const val STATUS: UByte = 0x06u
+        const val HOME: UByte = 0x07u
     }
 
     object State {

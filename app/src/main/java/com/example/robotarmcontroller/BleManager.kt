@@ -36,6 +36,7 @@ private const val TAG = "BleManager"
 class BleManager(context: Context) {
     private val bluetoothLe = BluetoothLe(context)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var scanJob: Job? = null // 用于管理扫描的 Job
 
     // 状态流
     sealed class ConnectionState {
@@ -70,35 +71,38 @@ class BleManager(context: Context) {
 
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
-    suspend fun scan() {
-        bluetoothLe.scan().collect { scanResult ->
-            Log.d(
-                TAG,
-                "发现BLE设备: 名称 - ${scanResult.device.name}, 地址 - ${scanResult.deviceAddress.address}, 信号强度 - ${scanResult.rssi}, uuids - ${scanResult.serviceUuids}"
-            )
-            _scanResults.update { oldList ->
-                val newList = oldList.toMutableList()
-                val existingIndex =
-                    oldList.indexOfFirst { it.deviceAddress.address == scanResult.deviceAddress.address }
-                if (existingIndex != -1) {
-                    newList[existingIndex] = scanResult // 更新信号强度等信息
-                } else {
-                    newList.add(scanResult)
+    fun startScan() {
+        if (scanJob?.isActive == true) {
+            Log.d(TAG, "Scan is already active.")
+            return
+        }
+        scanJob = scope.launch {
+            bluetoothLe.scan().collect { scanResult ->
+                Log.d(
+                    TAG,
+                    "发现BLE设备: 名称 - ${scanResult.device.name}, 地址 - ${scanResult.deviceAddress.address}, 信号强度 - ${scanResult.rssi}, uuids - ${scanResult.serviceUuids}"
+                )
+                _scanResults.update { oldList ->
+                    val newList = oldList.toMutableList()
+                    val existingIndex =
+                        oldList.indexOfFirst { it.deviceAddress.address == scanResult.deviceAddress.address }
+                    if (existingIndex != -1) {
+                        newList[existingIndex] = scanResult // 更新信号强度等信息
+                    } else {
+                        newList.add(scanResult)
+                    }
+                    newList
                 }
-                newList
             }
         }
-
     }
 
     fun stopScan() {
         Log.d(TAG, "stopScan 被调用")
-        // 如果 BluetoothLe 有 stopScan 方法，调用它
-        try {
-            Log.d(TAG, "已通知底层库停止扫描")
-        } catch (e: Exception) {
-            Log.w(TAG, "调用底层 stopScan 失败: ${e.message}")
-        }
+        scanJob?.cancel() // 取消扫描 Job
+        scanJob = null
+        _scanResults.value = emptyList() // 清空扫描结果
+        Log.d(TAG, "BLE 扫描已停止")
     }
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     suspend fun connect(device: BluetoothDevice) {
@@ -119,7 +123,7 @@ class BleManager(context: Context) {
                 _connectedDevice = device
 
                 findUartCharacteristics(this.services)
-                stopScan()
+                stopScan() // 连接成功后停止扫描
 
                 coroutineScope {
                     // 接收协程
@@ -240,9 +244,9 @@ class BleManager(context: Context) {
      * 断开连接
      */
     fun disconnect() {
-        // TODO: 实现断开连接逻辑
         _connectedDevice = null
         _connectionState.value = ConnectionState.Disconnected
+        // TODO: 如果有正在进行的写入操作，可能需要取消或清空 writeChannel
         Log.d(TAG, "BLE 已断开连接")
     }
 
@@ -257,5 +261,3 @@ class BleManager(context: Context) {
     }
 
 }
-
-

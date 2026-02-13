@@ -52,6 +52,7 @@ fun RobotScreen(
     onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
     onSyncAllServoStatusClick: () -> Unit,
+    onAllServoHomeClick: () -> Unit = {},
     // -- cycle related (optional, with defaults so existing callers keep compiling)
     cycleList: List<CycleInfo> = emptyList(),
     onCycleStart: (Int) -> Unit = {},
@@ -70,7 +71,7 @@ fun RobotScreen(
             onServoEnableClick = onServoEnableClick,
             onServoDisableClick = onServoDisableClick,
             onSyncAllServoStatusClick = onSyncAllServoStatusClick,
-            onSyncCycles = onRequestCycleListClick,
+            onServosHome = onAllServoHomeClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -124,6 +125,7 @@ fun RobotScreen(
     onClearHistoryClick: () -> Unit,
     onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
+    onAllServoHomeClick:() -> Unit,
     onRequestServoStatusClick: (Int) -> Unit,
     // -- cycle related (optional)
     cycleList: List<CycleInfo> = emptyList(),
@@ -145,6 +147,7 @@ fun RobotScreen(
         onClearHistoryClick = onClearHistoryClick,
         onServoEnableClick = onServoEnableClick,
         onServoDisableClick = onServoDisableClick,
+        onAllServoHomeClick = onAllServoHomeClick,
         onSyncAllServoStatusClick = {
             state.servoList.forEach { onRequestServoStatusClick(it.id) }
         },
@@ -169,7 +172,7 @@ private fun RobotActionBar(
     onServoEnableClick: () -> Unit,
     onServoDisableClick: () -> Unit,
     onSyncAllServoStatusClick: () -> Unit,
-    onSyncCycles: () -> Unit,
+    onServosHome: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -191,7 +194,7 @@ private fun RobotActionBar(
             Button(onClick = onServoEnableClick, enabled = isConnected) { Text("使能") }
             Button(onClick = onServoDisableClick, enabled = isConnected) { Text("失能") }
             OutlinedButton(onClick = onSyncAllServoStatusClick, enabled = isConnected) { Text("同步") }
-            OutlinedButton(onClick = onSyncCycles, enabled = isConnected) { Text("同步Cycle") }
+            OutlinedButton(onClick = onServosHome, enabled = isConnected) { Text("归位") }
         }
     }
 }
