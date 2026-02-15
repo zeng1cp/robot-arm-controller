@@ -6,15 +6,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.robotarmcontroller.ui.MainScreen
-import com.example.robotarmcontroller.ui.MainViewModelFactory
 import com.example.robotarmcontroller.ui.theme.RobotArmControllerTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     companion object {
         private val REQUIRED_PERMISSIONS = arrayOf(
@@ -35,20 +33,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             RobotArmControllerTheme {
-                val viewModelFactory = MainViewModelFactory(this)
-
-                CompositionLocalProvider(
-                    LocalViewModelStoreOwner provides this
-                ) {
-                    viewModel<com.example.robotarmcontroller.ui.ble.BleViewModel>(
-                        factory = viewModelFactory
-                    )
-                    viewModel<com.example.robotarmcontroller.ui.robot.RobotViewModel>(
-                        factory = viewModelFactory
-                    )
-
-                    MainScreen()
-                }
+                // 直接使用 MainScreen，ViewModel 通过 hiltViewModel() 在内部获取
+                MainScreen()
             }
         }
     }

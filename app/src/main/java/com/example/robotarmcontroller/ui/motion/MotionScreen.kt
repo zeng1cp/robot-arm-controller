@@ -54,8 +54,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import com.example.robotarmcontroller.data.CycleInfo
 import com.example.robotarmcontroller.protocol.MotionProtocolCodec
-import com.example.robotarmcontroller.ui.robot.CycleInfo
 import com.example.robotarmcontroller.ui.robot.CyclePanel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -838,8 +838,12 @@ private fun MotionPresetDialog(
                             value = currentValue,
                             onValueChange = {
                                 valueMap[servoId] = it
+                            },
+                            onValueChangeFinished = {
+                                // 滑动完成时获取最终值，如果实时模式开启则发送预览
+                                val finalValue = valueMap[servoId] ?: currentValue
                                 if (realtime) {
-                                    onPreviewServoValue(servoId, mode, it)
+                                    onPreviewServoValue(servoId, mode, finalValue)
                                 }
                             },
                             valueRange = if (mode == MotionProtocolCodec.MODE_PWM) 500f..2500f else 0f..270f

@@ -1,6 +1,7 @@
 package com.example.robotarmcontroller.ui.ble
 
 import androidx.bluetooth.ScanResult
+import com.example.robotarmcontroller.common.AppError
 
 sealed class BleConnectionState {
     object Idle : BleConnectionState()
@@ -8,7 +9,7 @@ sealed class BleConnectionState {
     object Connecting : BleConnectionState()
     object Connected : BleConnectionState()
     object Disconnected : BleConnectionState()
-    data class Error(val message: String) : BleConnectionState()
+    data class Error(val error: AppError) : BleConnectionState()
 }
 
 data class BleUiState(

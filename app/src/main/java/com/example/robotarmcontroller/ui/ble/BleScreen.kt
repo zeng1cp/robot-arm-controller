@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.robotarmcontroller.common.AppError
 
 @Composable
 fun BleScreen(
@@ -170,7 +171,7 @@ fun BleStatusCard(
             if (connectionState is BleConnectionState.Error) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "错误: ${connectionState.message}",
+                    text = "错误: ${connectionState.error.userMessage ?: connectionState.error.message}",
                     color = Color.Red,
                     fontSize = 12.sp
                 )

@@ -1,4 +1,4 @@
-package com.example.robotarmcontroller
+package com.example.robotarmcontroller.data
 
 import android.Manifest
 import android.content.Context
@@ -9,13 +9,15 @@ import androidx.bluetooth.BluetoothLe
 import androidx.bluetooth.GattCharacteristic
 import androidx.bluetooth.GattService
 import androidx.bluetooth.ScanResult
+import com.example.robotarmcontroller.common.AppError
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -24,19 +26,23 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.collections.forEach
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
-private const val TAG = "BleManager"
+private const val TAG = "BleRepository"
 
-
-class BleManager(context: Context) {
+@Singleton
+class BleRepository @Inject constructor(
+    @field:ApplicationContext private val context: Context
+) {
     private val bluetoothLe = BluetoothLe(context)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var scanJob: Job? = null // 用于管理扫描的 Job
+    private var connectionJob: Job? = null // 用于管理连接的 Job
+    private var connectionCompletionDeferred: CompletableDeferred<Unit>? = null // 用于控制连接的生命周期
 
     // 状态流
     sealed class ConnectionState {
@@ -48,7 +54,7 @@ class BleManager(context: Context) {
             val rxCharacteristic: GattCharacteristic?
         ) : ConnectionState()
 
-        data class Error(val message: String) : ConnectionState()
+        data class Error(val error: AppError) : ConnectionState()
         object Disconnected : ConnectionState()
     }
 
@@ -67,10 +73,20 @@ class BleManager(context: Context) {
 
     private var rxCharacteristic: GattCharacteristic? = null
     private var txCharacteristic: GattCharacteristic? = null
-    private val writeChannel = Channel<ByteArray>(Channel.UNLIMITED)
+    private var writeChannel: Channel<ByteArray> = Channel(Channel.UNLIMITED)
 
+    /**
+     * 重新创建写入通道，在连接成功或通道被取消后调用
+     */
+    private fun recreateWriteChannel() {
+        // 如果通道已经关闭或取消，创建新的通道
+        if (writeChannel.isClosedForSend || writeChannel.isClosedForReceive) {
+            writeChannel = Channel(Channel.UNLIMITED)
+            Log.d(TAG, "写入通道已重新创建")
+        }
+    }
 
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
     fun startScan() {
         if (scanJob?.isActive == true) {
             Log.d(TAG, "Scan is already active.")
@@ -104,29 +120,35 @@ class BleManager(context: Context) {
         _scanResults.value = emptyList() // 清空扫描结果
         Log.d(TAG, "BLE 扫描已停止")
     }
+
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    suspend fun connect(device: BluetoothDevice) {
-        try {
-            // 清除之前的连接
-            _connectedDevice = null
+    fun connect(device: BluetoothDevice) {
+        if (connectionJob?.isActive == true) {
+            Log.d(TAG, "连接已在进行中或已连接。")
+            return
+        }
 
-            _connectionState.value = ConnectionState.Connecting
+        connectionJob = scope.launch {
+            connectionCompletionDeferred = CompletableDeferred() // 初始化 CompletableDeferred
+            try {
+                _connectedDevice = null
+                _connectionState.value = ConnectionState.Connecting
 
-            bluetoothLe.connectGatt(device) {
-                _connectionState.value = ConnectionState.DiscoveringServices
+                bluetoothLe.connectGatt(device) {
+                    _connectionState.value = ConnectionState.DiscoveringServices
 
-                servicesFlow
-                    .filter { it.isNotEmpty() }
-                    .first()
+                    servicesFlow
+                        .filter { it.isNotEmpty() }
+                        .first()
 
-                // 保存连接的设备
-                _connectedDevice = device
+                    _connectedDevice = device
 
-                findUartCharacteristics(this.services)
-                stopScan() // 连接成功后停止扫描
+                    findUartCharacteristics(this.services)
+                    stopScan() // 连接成功后停止扫描
+                    
+                    // 重新创建写入通道，确保发送功能正常
+                    recreateWriteChannel()
 
-                coroutineScope {
-                    // 接收协程
                     launch {
                         rxCharacteristic?.let {
                             subscribeToCharacteristic(it).collect { bytes ->
@@ -135,31 +157,66 @@ class BleManager(context: Context) {
                             }
                         }
                     }
-                    // 发送协程
                     launch {
                         txCharacteristic?.let {
                             for (data in writeChannel) {
                                 writeCharacteristic(it, data)
-                                Log.d(TAG,"send:  ${data.contentToString()}")
+                                Log.d(TAG, "send:  ${data.contentToString()}")
                             }
                         }
                     }
+                    
+                    connectionCompletionDeferred?.await() // 挂起 lambda，直到 deferred 完成
                 }
+            } catch (e: CancellationException) {
+                Log.e(TAG, "BLE Connect Cancelled: ${e.message}")
+                _connectionState.value = ConnectionState.Error(AppError.BluetoothError.ConnectionLost)
+                _connectedDevice = null
+            } catch (e: Exception) {
+                Log.e(TAG, "BLE Connect Failed: ${e.message}")
+                _connectionState.value = ConnectionState.Error(AppError.BluetoothError.ConnectionFailed(e))
+                _connectedDevice = null
+            } finally {
+                // 确保 deferred 在连接结束时完成，以解除 await()
+                connectionCompletionDeferred?.complete(Unit)
+
+                if (_connectionState.value !is ConnectionState.Error) {
+                    _connectionState.value = ConnectionState.Disconnected
+                }
+                _connectedDevice = null
+                rxCharacteristic = null
+                txCharacteristic = null
+                writeChannel.cancel() // 在连接 Job 结束时取消 writeChannel
+                Log.d(TAG, "连接Job结束，写入通道已清空")
             }
-        } catch (e: CancellationException) {
-            Log.e(TAG, "BLE Connect Failed: ${e.message}")
-            _connectionState.value = ConnectionState.Error(e.message ?: "连接失败")
-            _connectedDevice = null
-        } catch (e: Exception) {
-            Log.e(TAG, "BLE Connect Failed: ${e.message}")
-            _connectionState.value = ConnectionState.Error(e.message ?: "连接失败")
-            _connectedDevice = null
         }
     }
+    
+    fun write(data: ByteArray): Boolean {
+        // 检查连接状态，只有在Ready状态才能发送
+        val currentState = _connectionState.value
+        if (currentState !is ConnectionState.Ready) {
+            Log.e(TAG, "连接未就绪，当前状态: $currentState")
+            return false
+        }
 
+        // 检查通道是否可发送，如果关闭但连接正常，尝试恢复
+        if (writeChannel.isClosedForSend) {
+            Log.w(TAG, "写入通道已关闭，但连接状态正常，尝试恢复")
+            recreateWriteChannel()
+            
+            // 再次检查
+            if (writeChannel.isClosedForSend) {
+                Log.e(TAG, "恢复写入通道失败")
+                return false
+            }
+        }
 
-    fun write(data: ByteArray) {
-        writeChannel.trySend(data)
+        val result = writeChannel.trySend(data).isSuccess
+        if (!result) {
+            Log.e(TAG, "发送数据失败，通道可能已满或已关闭")
+        }
+        return result
     }
 
 
@@ -175,9 +232,8 @@ class BleManager(context: Context) {
             service.characteristics.forEach { characteristic ->
                 val properties = characteristic.properties
 
-                // 调试日志
                 Log.d(
-                    TAG,  // 改为统一的 TAG
+                    TAG,
                     "特征值: ${characteristic.uuid}, 属性: $properties (${properties.toInt()})"
                 )
 
@@ -216,17 +272,17 @@ class BleManager(context: Context) {
         // 更新连接状态
         when {
             txCharacteristic == null && rxCharacteristic == null -> {
-                _connectionState.value = ConnectionState.Error("未找到透传特征值")
+                _connectionState.value = ConnectionState.Error(AppError.BluetoothError.CharacteristicNotFound("UART"))
                 Log.e(TAG, "未找到任何透传特征值")
             }
 
             txCharacteristic == null -> {
-                _connectionState.value = ConnectionState.Error("未找到 TX(发送)特征值")
+                _connectionState.value = ConnectionState.Error(AppError.BluetoothError.CharacteristicNotFound("TX"))
                 Log.e(TAG, "未找到 TX 特征值，但找到了 RX")
             }
 
             rxCharacteristic == null -> {
-                _connectionState.value = ConnectionState.Error("未找到 RX(接收)特征值")
+                _connectionState.value = ConnectionState.Error(AppError.BluetoothError.CharacteristicNotFound("RX"))
                 Log.e(TAG, "未找到 RX 特征值，但找到了 TX")
             }
 
@@ -244,11 +300,15 @@ class BleManager(context: Context) {
      * 断开连接
      */
     fun disconnect() {
+        connectionCompletionDeferred?.complete(Unit) // 完成 deferred，解除 connectGatt lambda 的挂起
+        connectionJob?.cancel() // 取消正在进行的连接 Job
+        connectionJob = null
         _connectedDevice = null
         _connectionState.value = ConnectionState.Disconnected
-        // TODO: 如果有正在进行的写入操作，可能需要取消或清空 writeChannel
-        Log.d(TAG, "BLE 已断开连接")
+        writeChannel.cancel() // 清空并关闭写入通道
+        Log.d(TAG, "BLE 已断开连接，连接 Job 已取消")
     }
+
 
     /**
      * 清理资源
@@ -256,7 +316,7 @@ class BleManager(context: Context) {
     fun close() {
         stopScan()
         disconnect()
-        scope.cancel()
+        scope.cancel() // 取消 BleManager 自身的 CoroutineScope
         Log.d(TAG, "BLE 管理器已关闭")
     }
 

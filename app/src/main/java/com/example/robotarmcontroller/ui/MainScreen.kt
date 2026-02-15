@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Bluetooth
@@ -16,41 +16,29 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Tab
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.robotarmcontroller.protocol.ProtocolCommand
-import com.example.robotarmcontroller.protocol.ProtocolFrameType
-import com.example.robotarmcontroller.protocol.ServoProtocolCodec
-import com.example.robotarmcontroller.protocol.ServoSetPwmPayload
-import com.example.robotarmcontroller.protocol.SysProtocolCodec
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.robotarmcontroller.ui.ble.BleConnectionState
 import com.example.robotarmcontroller.ui.ble.BleScreen
-import com.example.robotarmcontroller.ui.motion.MotionScreen
 import com.example.robotarmcontroller.ui.ble.BleViewModel
-import com.example.robotarmcontroller.ui.robot.BleService
+import com.example.robotarmcontroller.ui.motion.MotionScreen
 import com.example.robotarmcontroller.ui.robot.RobotScreen
 import com.example.robotarmcontroller.ui.robot.RobotViewModel
-import kotlinx.coroutines.launch
 
 private enum class MainTab(val title: String) {
     SERVO("Servo"),
@@ -60,95 +48,17 @@ private enum class MainTab(val title: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(modifier: Modifier = Modifier) {
-    val bleViewModel: BleViewModel = viewModel()
-    val robotViewModel: RobotViewModel = viewModel()
-
+fun MainScreen(
+    bleViewModel: BleViewModel = hiltViewModel(),
+    robotViewModel: RobotViewModel = hiltViewModel()
+) {
     val bleState by bleViewModel.uiState.collectAsState()
     val robotState by robotViewModel.uiState.collectAsState()
     val cycleList by robotViewModel.cycleList.collectAsState()
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(bleState.connectionState) {
-        when (bleState.connectionState) {
-            is BleConnectionState.Connected -> {
-                val bleService = object : BleService {
-                    override suspend fun sendServoCommand(servoId: Int, pwmValue: Int): Boolean {
-                        val data = ServoProtocolCodec.encodeSetPwm(
-                            ServoSetPwmPayload(servoId = servoId, pwmValue = pwmValue)
-                        )
-                        return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
-                    }
-
-                    override suspend fun setServoEnable(enable: Boolean): Boolean {
-                        val data = if (enable) {
-                            byteArrayOf(ProtocolCommand.Servo.ENABLE.toByte())
-                        } else {
-                            byteArrayOf(ProtocolCommand.Servo.DISABLE.toByte())
-                        }
-                        return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
-                    }
-
-                    override suspend fun setAllServoHome(): Boolean {
-                        val data = byteArrayOf(ProtocolCommand.Servo.HOME.toByte())
-                        return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
-                    }
-
-                    override suspend fun requestServoStatus(servoId: Int): Boolean {
-                        val data = ServoProtocolCodec.encodeGetStatus(servoId)
-                        return bleViewModel.sendFrame(ProtocolFrameType.SERVO, data)
-                    }
-
-                    override suspend fun sendTestMessage(message: String): Boolean {
-                        return bleViewModel.sendFrame(
-                            ProtocolFrameType.SYS,
-                            SysProtocolCodec.encodePing(message)
-                        )
-                    }
-
-                    override suspend fun sendFrame(frameType: UInt, data: ByteArray): Boolean {
-                        return bleViewModel.sendFrame(frameType, data)
-                    }
-                }
-                robotViewModel.setBleService(bleService)
-
-                scope.launch {
-                    snackbarHostState.showSnackbar(
-                        "蓝牙连接成功",
-                        duration = SnackbarDuration.Short
-                    )
-                }
-            }
-
-            is BleConnectionState.Error -> {
-                robotViewModel.disconnect()
-                val errorMsg = (bleState.connectionState as BleConnectionState.Error).message
-                scope.launch {
-                    snackbarHostState.showSnackbar(
-                        "连接错误: $errorMsg",
-                        duration = SnackbarDuration.Long
-                    )
-                }
-            }
-
-            BleConnectionState.Idle,
-            BleConnectionState.Disconnected -> robotViewModel.disconnect()
-
-            else -> Unit
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        bleViewModel.incomingFrames.collect { frame ->
-            robotViewModel.onIncomingProtocolFrame(frame)
-        }
-    }
-
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -173,11 +83,11 @@ fun MainScreen(modifier: Modifier = Modifier) {
         }
     ) { paddingValues ->
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 仅保留弹窗和扫描逻辑，不占主要控制区高度
+            // 蓝牙扫描弹窗和状态卡片（仅用于弹窗，不占主要高度）
             BleScreen(
                 state = bleState,
                 onScanClick = { bleViewModel.showScanDialog() },
@@ -214,13 +124,12 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     onServoDisableClick = robotViewModel::setServoDisable,
                     onAllServoHomeClick = robotViewModel::setAllServoHome,
                     onSyncAllServoStatusClick = robotViewModel::requestAllServoStatus,
-                    // pass cycle state and callbacks
                     cycleList = cycleList,
-                    onCycleStart = robotViewModel::startCycle,
-                    onCyclePause = robotViewModel::pauseCycle,
-                    onCycleRestart = robotViewModel::restartCycle,
-                    onCycleRelease = robotViewModel::releaseCycle,
-                    onRequestCycleStatusClick = robotViewModel::requestCycleStatus,
+                    onCycleStart = robotViewModel::startMotionCycle,
+                    onCyclePause = robotViewModel::pauseMotionCycle,
+                    onCycleRestart = robotViewModel::restartMotionCycle,
+                    onCycleRelease = robotViewModel::releaseMotionCycle,
+                    onRequestCycleStatusClick = robotViewModel::requestMotionCycleStatus,
                     onRequestCycleListClick = robotViewModel::requestCycleList,
                     modifier = Modifier
                         .fillMaxSize()
@@ -270,19 +179,16 @@ private fun BleConnectionBadge(state: BleConnectionState) {
             "已连接",
             Color(0xFF2E7D32)
         )
-
         BleConnectionState.Connecting -> Triple(
             Icons.AutoMirrored.Filled.BluetoothSearching,
             "连接中",
             Color(0xFF1565C0)
         )
-
         BleConnectionState.Scanning -> Triple(
             Icons.AutoMirrored.Filled.BluetoothSearching,
             "扫描中",
             Color(0xFF1565C0)
         )
-
         is BleConnectionState.Error -> Triple(Icons.Default.Warning, "错误", Color(0xFFC62828))
         else -> Triple(Icons.Default.Bluetooth, "未连接", Color.Gray)
     }

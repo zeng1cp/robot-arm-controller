@@ -13,6 +13,7 @@ foundation = "1.10.0"
 media3CommonKtx = "1.8.0"
 material3 = "1.4.0"
 uiText = "1.10.2"
+datastore = "1.1.1"
 
 [libraries]
 androidx-bluetooth = { module = "androidx.bluetooth:bluetooth", version.ref = "bluetooth" }
@@ -36,6 +37,7 @@ androidx-compose-foundation = { group = "androidx.compose.foundation", name = "f
 androidx-media3-common-ktx = { group = "androidx.media3", name = "media3-common-ktx", version.ref = "media3CommonKtx" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 androidx-compose-ui-text = { group = "androidx.compose.ui", name = "ui-text", version.ref = "uiText" }
+androidx-datastore = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
