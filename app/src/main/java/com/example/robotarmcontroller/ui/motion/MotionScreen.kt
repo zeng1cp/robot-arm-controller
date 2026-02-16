@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -54,9 +56,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
-import com.example.robotarmcontroller.data.CycleInfo
 import com.example.robotarmcontroller.protocol.MotionProtocolCodec
-import com.example.robotarmcontroller.ui.robot.CyclePanel
+import com.example.robotarmcontroller.ui.motion.MotionPreset
+import com.example.robotarmcontroller.ui.motion.MotionPresetStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -69,25 +71,6 @@ data class MotionServoInfo(
     val isMoving: Boolean
 )
 
-private enum class MotionPresetStatus {
-    PENDING,
-    RUNNING,
-    PAUSED
-}
-
-private data class MotionPreset(
-    val id: Int,
-    val name: String,
-    val mode: Int,
-    val durationMs: Int,
-    val servoIds: List<Int>,
-    val values: List<Float>,
-    val realtime: Boolean,
-    val status: MotionPresetStatus? = null,
-    val groupId: Int = 0,
-    val startedAtMs: Long? = null,
-    val elapsedMs: Long = 0
-)
 
 private const val PRESET_PREFS_NAME = "motion_presets"
 private const val PRESET_KEY = "preset_list"
@@ -105,21 +88,7 @@ fun MotionScreen(
     onPauseMotion: (groupId: Int) -> Unit,
     onResumeMotion: (groupId: Int) -> Unit,
     onGetMotionStatus: (groupId: Int) -> Unit,
-    onPreviewServoValue: (servoId: Int, mode: Int, value: Float) -> Unit,
-    onCreateCycle: (
-        mode: Int,
-        ids: List<Int>,
-        poses: List<List<Float>>,
-        durations: List<Int>,
-        maxLoops: Int
-    ) -> Unit,
-    onStartCycle: (index: Int) -> Unit,
-    onRestartCycle: (index: Int) -> Unit,
-    onPauseCycle: (index: Int) -> Unit,
-    onReleaseCycle: (index: Int) -> Unit,
-    onGetCycleStatus: (index: Int) -> Unit,
-    onRequestCycleList: () -> Unit = {},
-    cycleList: List<CycleInfo> = emptyList()
+    onPreviewServoValue: (servoId: Int, mode: Int, value: Float) -> Unit
 ) {
     val context = LocalContext.current
     val presets = remember { mutableStateListOf<MotionPreset>() }
@@ -130,10 +99,8 @@ fun MotionScreen(
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
 
     var showPresetDialog by remember { mutableStateOf(false) }
-    var showCycleDialog by remember { mutableStateOf(false) }
     var showConflictDialog by remember { mutableStateOf(false) }
     var conflictMessage by remember { mutableStateOf("") }
-    var cycleIndexText by remember { mutableStateOf("0") }
     var editingPresetId by remember { mutableStateOf<Int?>(null) }
     var pendingStartAtMs by remember { mutableStateOf<Long?>(null) }
     var showStartFailureDialog by remember { mutableStateOf(false) }
@@ -328,7 +295,6 @@ fun MotionScreen(
                             editingPresetId = null
                             showPresetDialog = true
                         }) { Text("添加预设 Motion") }
-                        OutlinedButton(onClick = { showCycleDialog = true }) { Text("创建 Cycle") }
                     }
                     if (presets.isEmpty()) {
                         Text("暂无预设动作，请点击“添加预设 Motion”。", color = Color.Gray)
@@ -386,47 +352,6 @@ fun MotionScreen(
                 }
             }
         }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Cycle 控制", style = MaterialTheme.typography.titleMedium)
-                TextField(
-                    value = cycleIndexText,
-                    onValueChange = { cycleIndexText = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Cycle index") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onStartCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("启动") }
-                    OutlinedButton(onClick = { onRestartCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("重启") }
-                    OutlinedButton(onClick = { onPauseCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("暂停") }
-                    OutlinedButton(onClick = { onReleaseCycle(cycleIndexText.toIntOrNull() ?: 0) }) { Text("释放") }
-                    OutlinedButton(onClick = { onGetCycleStatus(cycleIndexText.toIntOrNull() ?: 0) }) { Text("状态") }
-                    OutlinedButton(onClick = { onRequestCycleList() }) { Text("刷新列表") }
-                }
-            }
-        }
-
-        // show list of existing cycles if available
-        if (cycleList.isNotEmpty()) {
-            CyclePanel(
-                cycleList = cycleList,
-                onStart = onStartCycle,
-                onPause = onPauseCycle,
-                onRestart = onRestartCycle,
-                onRelease = onReleaseCycle,
-                onRequestStatus = onGetCycleStatus,
-                onRequestList = onRequestCycleList,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-            )
-        }
     }
 
     if (showPresetDialog) {
@@ -463,27 +388,6 @@ fun MotionScreen(
                 editingPresetId = null
             },
             onPreviewServoValue = onPreviewServoValue
-        )
-    }
-
-    if (showCycleDialog) {
-        MotionCycleDialog(
-            presets = presets,
-            onDismiss = { showCycleDialog = false },
-            onConfirm = { selectedPresets, maxLoops ->
-                val first = selectedPresets.firstOrNull() ?: return@MotionCycleDialog
-                val sameMode = selectedPresets.all { it.mode == first.mode }
-                val sameServos = selectedPresets.all { it.servoIds == first.servoIds }
-                if (!sameMode || !sameServos) {
-                    conflictMessage = "所选预设的模式或舵机列表不一致，无法创建 Cycle。"
-                    showConflictDialog = true
-                    return@MotionCycleDialog
-                }
-                val poses = selectedPresets.map { it.values }
-                val durations = selectedPresets.map { it.durationMs }
-                onCreateCycle(first.mode, first.servoIds, poses, durations, maxLoops)
-                showCycleDialog = false
-            }
         )
     }
 
@@ -891,57 +795,6 @@ private fun MotionPresetDialog(
             }) {
                 Text(if (preset == null) "添加" else "保存")
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
-}
-
-@Composable
-private fun MotionCycleDialog(
-    presets: List<MotionPreset>,
-    onDismiss: () -> Unit,
-    onConfirm: (selected: List<MotionPreset>, maxLoops: Int) -> Unit
-) {
-    val selectedIds = remember { mutableStateListOf<Int>() }
-    var maxLoops by remember { mutableStateOf("0") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("通过预设创建 Cycle") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("选择预设动作")
-                presets.forEach { preset ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = selectedIds.contains(preset.id),
-                            onCheckedChange = { checked ->
-                                if (checked) {
-                                    selectedIds.add(preset.id)
-                                } else {
-                                    selectedIds.remove(preset.id)
-                                }
-                            }
-                        )
-                        Text(preset.name)
-                    }
-                }
-                TextField(
-                    value = maxLoops,
-                    onValueChange = { maxLoops = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("最大循环次数 (0=无限)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val selected = presets.filter { selectedIds.contains(it.id) }
-                onConfirm(selected, maxLoops.toIntOrNull() ?: 0)
-            }) { Text("创建") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }

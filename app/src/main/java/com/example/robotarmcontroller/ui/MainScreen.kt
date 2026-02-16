@@ -33,16 +33,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.robotarmcontroller.data.model.CycleInfo
+import com.example.robotarmcontroller.ui.arm.ArmScreen
+import com.example.robotarmcontroller.ui.arm.ArmViewModel
 import com.example.robotarmcontroller.ui.ble.BleConnectionState
 import com.example.robotarmcontroller.ui.ble.BleScreen
 import com.example.robotarmcontroller.ui.ble.BleViewModel
 import com.example.robotarmcontroller.ui.motion.MotionScreen
-import com.example.robotarmcontroller.ui.robot.RobotScreen
-import com.example.robotarmcontroller.ui.robot.RobotViewModel
+import com.example.robotarmcontroller.ui.motion.MotionViewModel
+import com.example.robotarmcontroller.ui.servo.ServoScreen
+import com.example.robotarmcontroller.ui.servo.ServoViewModel
+import com.example.robotarmcontroller.ui.cycle.CycleScreen
+import com.example.robotarmcontroller.ui.cycle.CycleViewModel
 
 private enum class MainTab(val title: String) {
     SERVO("Servo"),
     MOTION("Motion"),
+    CYCLE("Cycle"),
     ARM("Arm")
 }
 
@@ -50,11 +57,18 @@ private enum class MainTab(val title: String) {
 @Composable
 fun MainScreen(
     bleViewModel: BleViewModel = hiltViewModel(),
-    robotViewModel: RobotViewModel = hiltViewModel()
+    servoViewModel: ServoViewModel = hiltViewModel(),
+    motionViewModel: MotionViewModel = hiltViewModel(),
+    armViewModel: ArmViewModel = hiltViewModel(),
+    cycleViewModel: CycleViewModel = hiltViewModel()
 ) {
     val bleState by bleViewModel.uiState.collectAsState()
-    val robotState by robotViewModel.uiState.collectAsState()
-    val cycleList by robotViewModel.cycleList.collectAsState()
+    val servoState by servoViewModel.uiState.collectAsState()
+    val motionState by motionViewModel.uiState.collectAsState()
+    val armState by armViewModel.uiState.collectAsState()
+    val cycleList by cycleViewModel.cycleList.collectAsState<List<CycleInfo>>()
+    val cycleState by cycleViewModel.uiState.collectAsState()
+    val servoStates by cycleViewModel.servoStates.collectAsState()
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
@@ -112,60 +126,81 @@ fun MainScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             when (MainTab.entries[selectedTabIndex]) {
-                MainTab.SERVO -> RobotScreen(
-                    state = robotState,
-                    onPwmChange = robotViewModel::onPwmChange,
-                    onPwmChangeFinished = robotViewModel::onPwmChangeFinished,
-                    onAngleChange = robotViewModel::onAngleChange,
-                    onAngleChangeFinished = robotViewModel::onAngleChangeFinished,
-                    onToggleControlMode = robotViewModel::toggleControlMode,
-                    onClearHistoryClick = robotViewModel::clearHistory,
-                    onServoEnableClick = robotViewModel::setServoEnable,
-                    onServoDisableClick = robotViewModel::setServoDisable,
-                    onAllServoHomeClick = robotViewModel::setAllServoHome,
-                    onSyncAllServoStatusClick = robotViewModel::requestAllServoStatus,
-                    cycleList = cycleList,
-                    onCycleStart = robotViewModel::startMotionCycle,
-                    onCyclePause = robotViewModel::pauseMotionCycle,
-                    onCycleRestart = robotViewModel::restartMotionCycle,
-                    onCycleRelease = robotViewModel::releaseMotionCycle,
-                    onRequestCycleStatusClick = robotViewModel::requestMotionCycleStatus,
-                    onRequestCycleListClick = robotViewModel::requestCycleList,
+                MainTab.SERVO -> ServoScreen(
+                    state = servoState,
+                    onPwmChange = servoViewModel::onPwmChange,
+                    onPwmChangeFinished = servoViewModel::onPwmChangeFinished,
+                    onAngleChange = servoViewModel::onAngleChange,
+                    onAngleChangeFinished = servoViewModel::onAngleChangeFinished,
+                    onToggleControlMode = servoViewModel::toggleControlMode,
+                    onClearHistoryClick = servoViewModel::clearHistory,
+                    onServoEnableClick = servoViewModel::setServoEnable,
+                    onServoDisableClick = servoViewModel::setServoDisable,
+                    onAllServoHomeClick = servoViewModel::sendServosHome,
+                    onSyncAllServoStatusClick = servoViewModel::requestAllServoStatus,
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f)
                 )
 
                 MainTab.MOTION -> MotionScreen(
-                    currentGroupId = robotState.motionGroupId,
-                    motionCompleteGroupId = robotState.motionCompleteGroupId,
-                    servoInfo = robotState.servoList.map {
+                    currentGroupId = motionState.motionGroupId,
+                    motionCompleteGroupId = motionState.motionCompleteGroupId,
+                    servoInfo = servoState.servoList.map {
                         com.example.robotarmcontroller.ui.motion.MotionServoInfo(
                             id = it.id,
                             name = it.name,
                             isMoving = it.isMoving
                         )
                     },
-                    onStartMotion = robotViewModel::startMotion,
-                    onStopMotion = robotViewModel::stopMotion,
-                    onPauseMotion = robotViewModel::pauseMotion,
-                    onResumeMotion = robotViewModel::resumeMotion,
-                    onGetMotionStatus = robotViewModel::requestMotionStatus,
-                    onPreviewServoValue = robotViewModel::previewServoValue,
-                    onCreateCycle = robotViewModel::createMotionCycle,
-                    onStartCycle = robotViewModel::startMotionCycle,
-                    onRestartCycle = robotViewModel::restartMotionCycle,
-                    onPauseCycle = robotViewModel::pauseMotionCycle,
-                    onReleaseCycle = robotViewModel::releaseMotionCycle,
-                    onGetCycleStatus = robotViewModel::requestMotionCycleStatus,
-                    onRequestCycleList = robotViewModel::requestCycleList,
-                    cycleList = cycleList,
+                    onStartMotion = motionViewModel::startMotion,
+                    onStopMotion = motionViewModel::stopMotion,
+                    onPauseMotion = motionViewModel::pauseMotion,
+                    onResumeMotion = motionViewModel::resumeMotion,
+                    onGetMotionStatus = motionViewModel::requestMotionStatus,
+                    onPreviewServoValue = motionViewModel::previewServoValue,
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f)
                 )
 
-                MainTab.ARM -> PlaceholderPage(title = "Arm 控制（待实现）")
+                MainTab.CYCLE -> CycleScreen(
+                    state = cycleState,
+                    servoStates = servoStates,
+                    onCreateCycle = cycleViewModel::createCycle,
+                    onStartCycle = cycleViewModel::startCycle,
+                    onRestartCycle = cycleViewModel::restartCycle,
+                    onPauseCycle = cycleViewModel::pauseCycle,
+                    onReleaseCycle = cycleViewModel::releaseCycle,
+                    onRequestCycleStatus = cycleViewModel::requestCycleStatus,
+                    onRequestCycleList = cycleViewModel::requestCycleList,
+                    onUpdateCreationMode = cycleViewModel::updateCreationMode,
+                    onUpdateSelectedServoIds = cycleViewModel::updateSelectedServoIds,
+                    onAddPose = cycleViewModel::addPose,
+                    onUpdatePose = cycleViewModel::updatePose,
+                    onRemovePose = cycleViewModel::removePose,
+                    onSetEditingPose = cycleViewModel::setEditingPose,
+                    onUpdateCurrentPoseValue = cycleViewModel::updateCurrentPoseValue,
+                    onClearCreationState = cycleViewModel::clearCreationState,
+                    onDeleteCycle = cycleViewModel::deleteCycle,
+                    onConfirmDelete = cycleViewModel::confirmDeleteCycle,
+                    onStartEditingCycle = cycleViewModel::startEditingCycle,
+                    onCancelEditingCycle = cycleViewModel::cancelEditingCycle,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f)
+                )
+
+                MainTab.ARM -> ArmScreen(
+                    state = armState,
+                    onExecutePreset = armViewModel::executePreset,
+                    onStopAllMotion = armViewModel::stopAllMotion,
+                    onSelectPreset = armViewModel::selectPreset,
+                    onToggleCooperativeMode = armViewModel::toggleCooperativeMode,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f)
+                )
             }
         }
     }
@@ -196,18 +231,5 @@ private fun BleConnectionBadge(state: BleConnectionState) {
         Icon(icon, contentDescription = text, tint = tint)
         Spacer(modifier = Modifier.width(4.dp))
         Text(text, color = tint)
-    }
-}
-
-@Composable
-private fun PlaceholderPage(title: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("后续将按同一协议框架接入命令、状态同步与控制面板。")
     }
 }

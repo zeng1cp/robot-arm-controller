@@ -1,4 +1,4 @@
-package com.example.robotarmcontroller.data
+package com.example.robotarmcontroller.data.model
 
 data class CycleInfo(
     val index: Int,

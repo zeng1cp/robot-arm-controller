@@ -13,6 +13,7 @@ import com.example.robotarmcontroller.common.AppError
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -78,6 +79,7 @@ class BleRepository @Inject constructor(
     /**
      * 重新创建写入通道，在连接成功或通道被取消后调用
      */
+    @OptIn(DelicateCoroutinesApi::class)
     private fun recreateWriteChannel() {
         // 如果通道已经关闭或取消，创建新的通道
         if (writeChannel.isClosedForSend || writeChannel.isClosedForReceive) {
@@ -192,6 +194,7 @@ class BleRepository @Inject constructor(
         }
     }
     
+    @OptIn(DelicateCoroutinesApi::class)
     fun write(data: ByteArray): Boolean {
         // 检查连接状态，只有在Ready状态才能发送
         val currentState = _connectionState.value
